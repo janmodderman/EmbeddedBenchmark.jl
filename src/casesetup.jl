@@ -7,12 +7,39 @@ using DataFrames:DataFrame
 using DataFrames:Matrix
 using TimerOutputs
 using LinearAlgebra
-using CSV
 using STLCutters
 
 using GridapEmbedded.Interfaces
 using GridapEmbedded.CSG
 
+function parameters(method::String, case::String)
+    # Number of elements & element orders
+    nₓ = [8,16,32,64,128,256,512]
+    orders = [1,2]
+
+    # Geometrical parameters
+    Lₓ = 1.0    # [m]: horizontal domain length(s)
+    L₃ = 1.0    # [m]: vertical domain length
+    R = 0.25    # [m]: cylinder/sphere radius
+
+    # MMS parameters
+    g = 9.81                    # [m/s²]: gravitational constant
+    k = 2π/L₃                   # [rad/m]: wave number
+    ω = sqrt(g*k*tanh(k*L₃))    # [rad/s]: dispersion relation ocean waves
+    η₀ = 0.1                    # [m]: wave amplitude
+
+    # Ghost Penalty parameters per order 
+    γg = (0.1,0.1)
+
+    # solving & timing variables
+    ls = LUSolver()     # Lienar Solver
+    to = TimerOutput()  # TimerOutputs variable
+    
+    # output folder
+    folder = "data/sims/"*method*"/"*case*"/"
+
+    return (nₓ, orders), (Lₓ, L₃, R), (g, k, ω, η₀), γg, (ls, to), folder
+end # function
 
 # FUNCTION THAT RETURNS THE CORRECT WEAK FORM FOR AGFEM, CUTFEM, SBM & WSBM FOR BOTH ANALYTICAL & STL GEOMETRIES
 function weak_form(method::String; stl_flag=false)
@@ -33,7 +60,7 @@ function weak_form(method::String; stl_flag=false)
     a31(dΩ,dΓ₁,nΓ₁,n,d) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ + 
                                 ∫((nΓ₁⋅((((d(0)⋅∇∇(ϕ)) + ∇(ϕ))⋅n(0))*n(0) - ∇(ϕ)))*v)dΓ₁
     # Righthand side (ANALYTICAL)
-    l31(dΩ,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm) = v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅((f₂sbm(0)⋅n(0))*n(0)))*v)dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂ 
+    l31(dΩ,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm) = v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅(((v*f₂sbm(0))⋅n(0))*n(0))))dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂ 
     # =============================================================
     # Bilinear form (STL)
     a32(dΩ,dΓ₁,nΓ₁,n,d) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ + 
@@ -48,7 +75,7 @@ function weak_form(method::String; stl_flag=false)
                                             ∫((γg[1]*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰ +  # GP stabilization on gradients first order
                                             ∫((order>1)*(γg[2]*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰ # GP stabilization on gradients second order
     # Righthand side (ANALYTICAL)
-    l41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm) = v -> ∫(f₁(0)*w_α(v))dΩ + ∫( jump(nΓ₁*w_α(v))⋅((f₂sbm(0)⋅n(0))*n(0)) )dΓ₁ + ∫( jump(nE⁰*w_α(v))⋅(f₂sbm(0)⋅n(0))*n(0))dE⁰ + ∫((nΓ₂⋅f₂(0))*w_α(v))dΓ₂  
+    l41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm,Γ₁,E⁰) = v -> ∫(f₁(0)*w_α(v))dΩ + ∫( (jump(nΓ₁*w_α(v))*n(0))⋅((CellField(f₂sbm(0),Γ₁)⋅n(0))) )dΓ₁ + ∫( (jump(nE⁰*w_α(v))⋅n(0))*(CellField(f₂sbm(0),E⁰)⋅n(0)))dE⁰ + ∫((nΓ₂⋅f₂(0))*w_α(v))dΓ₂  
     # ==============================================================
     # Bilinear form (STL)
     a42(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order) = (ϕ,v) -> ∫(∇(ϕ)⋅w_α(∇(v)))dΩ + 
@@ -76,7 +103,7 @@ function weak_form(method::String; stl_flag=false)
             return a42, l42
         end # if
     else
-        println("Method unavailable")
+        println("Method unsupported")
         return
     end # if
 
@@ -135,7 +162,7 @@ function build_domain(method::String, cutgeo::EmbeddedDiscretization, cutgeo_fac
     elseif method == "wsbm"
         return _build_domain_wsbm(cutgeo, geo, model)
     else
-        println("Method unavailable")
+        println("Method unsupported")
         return
     end # if
 end # function
@@ -151,15 +178,17 @@ function _build_domain_agfem(cutgeo::EmbeddedDiscretization, cutgeo_facets::Embe
 end # function
 
 function _build_domain_cutfem(cutgeo::EmbeddedDiscretization, cutgeo_facets::EmbeddedFacetDiscretization)
-    Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = build_domain_agfem(cutgeo, cutgeo_facets)
+    Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_domain_agfem(cutgeo, cutgeo_facets)
     E⁰ = GhostSkeleton(cutgeo, ACTIVE_OUT)
     nE⁰ = get_normal_vector(E⁰)
     return Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰
 end # function
 
+# DEV NOTE: FOR SOME REASON THE PROBLEM DOESNT SOLVE CORRECTLY IF WE DO AN INTERFACE BETWEEN 2 SEPARATE DOMAINS, ALTHOUGH IT RETURNS A CORRECT BOUNDARYTRIANGULATION, INTERFACE WITH INTERIOR(MODEL) DOES WORK THOUGH
 function _build_domain_sbm(cutgeo::EmbeddedDiscretization, geo::Geometry, model::DiscreteModel; var=[1])
     Ω⁻act, Ω⁻pas = _build_helper(cutgeo, geo, model, var)
-    Γ₁ = Interface(Ω⁻pas, Ω⁻act).⁻     # surrogate boundary (interior tags on the boundary)
+    # Γ₁ = Interface(Ω⁻pas,Ω⁻act).⁺     # surrogate boundary (interior tags on the boundary)
+    Γ₁ = Interface(Interior(model), Ω⁻act).⁻
     nΓ₁ = get_normal_vector(Γ₁)
     Γ₂ = BoundaryTriangulation(Ω⁻act, tags=["top"])
     nΓ₂ = get_normal_vector(Γ₂)
@@ -167,7 +196,7 @@ function _build_domain_sbm(cutgeo::EmbeddedDiscretization, geo::Geometry, model:
 end # function
 
 function _build_domain_wsbm(cutgeo::EmbeddedDiscretization, geo::Geometry, model::DiscreteModel)
-    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = build_domain_sbm(cutgeo, geo, model; var=[0,1])
+    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_domain_sbm(cutgeo, geo, model; var=[0,1])
     E⁰ = GhostSkeleton(cutgeo, ACTIVE_OUT)
     nE⁰ = get_normal_vector(E⁰)
     return Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰
@@ -190,7 +219,7 @@ function _build_helper(cutgeo::EmbeddedDiscretization, geo::Geometry, model::Dis
 end # function
 
 # ANALYTICAL DISTANCE FUNCTIONS FOR SBM & WSBM
-function analytical_distances(model::DiscreteModel,Lₓ::Float64,L₃::Float64,R::Float64,fun::Function)
+function analytical_distance(model::DiscreteModel,Lₓ::Float64,L₃::Float64,R::Float64,fun::Function)
     ncd = num_cell_dims(model)
     if ncd < 3  # 2D: horizontal cylinder
         pmin = Point(-Lₓ/2, -L₃)
@@ -201,14 +230,14 @@ function analytical_distances(model::DiscreteModel,Lₓ::Float64,L₃::Float64,R
         pmax = Point(Lₓ/2, Lₓ/2, 0.0)
         pmid = 0.5*(pmax + pmin) + VectorValue(0.0, 0.0, L₃/2) 
     end # if
-    D(t,x) = pmid - x
-    absD(t,x) = sqrt(D(t,x)⋅D(t,x))
-    dist(t,x) = absD(t,x) - R
-    n(t,x) = (dist(t,x)>=0.0)*(D(t,x)./absD(t,x)) - (dist(t,x)<0.0)*(D(t,x)./absD(t,x))
-    d(t,x) = abs(dist(t,x))*n(t,x)
-    d(t) = x -> d(t,x)
-    n(t) = x -> n(t,x)
-    funsbm(t) = x -> fun(t,x + d(t,x))
+    D(x,t) = pmid - x
+    absD(x,t) = sqrt(D(x,t)⋅D(x,t))
+    dist(x,t) = absD(x,t) - R
+    n(x,t) = (dist(x,t)>=0.0)*(D(x,t)./absD(x,t)) - (dist(x,t)<0.0)*(D(x,t)./absD(x,t))
+    d(x,t) = abs(dist(x,t))*n(x,t)
+    d(t) = x -> d(x,t)
+    n(t) = x -> n(x,t)
+    funsbm(t) = x -> fun(x + d(x,t),t)
     return d, n, funsbm
 end # function
 
@@ -287,7 +316,7 @@ function set_spaces(order::Int64, Ω⁻act::Triangulation, fun::Function, cutgeo
 end # function
 
 # BUILDING THE OPERATORS
-function build_operator(a::Function,l::Function,U::FESpace,V::FESpace)
+function build_operator(a::Function, l::Function, U::FESpace, V::FESpace)
     AffineFEOperator(a,l,U,V)
 end # function
 
@@ -300,7 +329,6 @@ end # function
 function L2norm(dΩ::Measure, ϕₕ::FEFunction, ϕ₀::Function)
     √(∑(∫((ϕₕ-ϕ₀)*(ϕₕ-ϕ₀))dΩ))
 end # function
-
 
 # PLOTTING FUNCTIONS
 function plot_L2(nₓ::Vector, orders::Vector, l2::Vector;marker=:circle, title="")
@@ -328,7 +356,7 @@ function write_results_omg(nₓ::Int64, order::Int64, ϕₕ::FEFunction ,ϕ₀::
     writevtk(Ω,folder*"omg_$(nₓ)_$order",cellfields=["ϕ"=>ϕ₀(0.0),"ϕₕ"=>ϕₕ, "error"=>(ϕₕ-ϕ₀(0.0))])
 end # function
 
-function write_results_gam(nₓ::Int64, order::Int64, Γ₁::Triangulation, nΓ₁::CellField, Γ₂::BoundaryTriangulation, nΓ₂::CellField;folder="")
+function write_results_gam(nₓ::Int64, order::Int64, Γ₁::Triangulation, nΓ₁::CellField, Γ₂::Triangulation, nΓ₂::CellField;folder="")
     writevtk(Γ₁,folder*"gam1_$(nₓ)_$order",cellfields=["normal"=>CellField(nΓ₁, Γ₁)])
     writevtk(Γ₂,folder*"gam2_$(nₓ)_$order",cellfields=["normal"=>CellField(nΓ₂, Γ₂)])
 end # function
