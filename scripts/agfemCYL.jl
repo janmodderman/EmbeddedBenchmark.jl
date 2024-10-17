@@ -1,4 +1,4 @@
-module Manufactured2Dagfem
+module agfemCYL
 using Gridap
 using Plots
 using GridapEmbedded
@@ -7,46 +7,29 @@ using DataFrames:DataFrame
 using DataFrames:Matrix
 using TimerOutputs
 using LinearAlgebra
-using CSV
-include("casesetup.jl")
+include("../src/CaseSetup.jl")
 
-# function MMSagfem()
-folder = "data/sims/manufactured/agfem/"
-to = TimerOutput()
-
-
-# Parameters
-Lₓ = 1.0
-d = 1.0
-g = 9.81
-k = 2π/d
-R = 0.25
-ω = sqrt(g*k*tanh(k*d))
-η₀ = 0.1
+function agfem()
+case = "cylinder"
 method = "agfem"
-# order = 1
-ls = LUSolver()
-# nₓ = 8
-nₓ_vec = [8,16,32,64]
-orders = [1,2]
+(nₓ_vec, orders), (Lₓ, L₃, R), (g, k, ω, η₀), _, (ls, to), folder = CaseSetup.parameters(method, case)
+
+# start loops
 l2s = []
 cns = []
-
 for order in orders
   degree = 2*order
   l2norms = Float64[]
   cnlist = Float64[]
-
   for nₓ in nₓ_vec
-
     # Setting up the model domain and MMS
     @timeit to "model $order, $nₓ" begin
-    model, labels, ϕ₀, f₁, f₂ = CaseSetup.setup_model_2d(nₓ;Lₓ=Lₓ,L₃=d,func_args=[g,k,η₀,ω])
+    model, _, ϕ₀, f₁, f₂ = CaseSetup.setup_model_2d(nₓ;Lₓ=Lₓ,L₃=L₃,func_args=[g,k,η₀,ω])
     end
 
     # Cutting the model domain
     @timeit to "cutting $order, $nₓ" begin
-    cutgeo, geo, cutgeo_facets = CaseSetup.geometry_cut(model;Lₓ=Lₓ, L₃=d, R=R)
+    cutgeo, geo, cutgeo_facets = CaseSetup.geometry_cut(model;Lₓ=Lₓ, L₃=L₃, R=R)
     end
 
     # Constructing the Interior and Boundaries
@@ -100,12 +83,13 @@ for order in orders
 end # for
 
 plt = plot(legend=:bottomleft)
-CaseSetup.plot_L2(nₓ_vec, orders, l2s; title="AgFEM 2D Cylinder L2 norm error")
+CaseSetup.plot_L2(nₓ_vec, orders, l2s; title=method*" "*case*" L2 norm error")
 display(plt)
 
 plt2 = plot(legend=:bottomleft)
-CaseSetup.plot_cond(nₓ_vec, orders, cns; title="AgFEM 2D Cylinder condition number")
+CaseSetup.plot_cond(nₓ_vec, orders, cns; title=method*" "*case*" condition number")
 # display(plt2)
 show(to)
-
-end
+end # function
+agfem()
+end # module
