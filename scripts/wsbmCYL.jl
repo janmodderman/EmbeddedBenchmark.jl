@@ -1,4 +1,4 @@
-module cutfemCYL
+module wsbmCYL
 using Gridap
 using Plots
 using GridapEmbedded
@@ -7,11 +7,11 @@ using DataFrames:DataFrame
 using DataFrames:Matrix
 using TimerOutputs
 using LinearAlgebra
-include("CaseSetup.jl")
+include("../src/CaseSetup.jl")
 
-function cutfem()
+function wsbm()
 case = "cylinder"
-method = "cutfem"
+method = "wsbm"
 (nₓ_vec, orders), (Lₓ, L₃, R), (g, k, ω, η₀), γg, (ls, to), folder = CaseSetup.parameters(method, case)
 
 # start loops
@@ -25,7 +25,7 @@ for order in orders
     h = Lₓ/nₓ
     # Setting up the model domain and MMS
     @timeit to "model $order, $nₓ" begin
-    model, _, ϕ₀, f₁, f₂ = CaseSetup.setup_model_2d(nₓ;Lₓ=Lₓ,L₃=L₃,func_args=[g,k,η₀,ω])
+    model, labels, ϕ₀, f₁, f₂ = CaseSetup.setup_model_2d(nₓ;Lₓ=Lₓ,L₃=L₃,func_args=[g,k,η₀,ω])
     end
 
     # Cutting the model domain
@@ -35,21 +35,21 @@ for order in orders
 
     # Constructing the Interior and Boundaries
     @timeit to "domain $order, $nₓ" begin
-    Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰ = CaseSetup.build_domain(method, cutgeo, cutgeo_facets, geo, model)
+    Ωwsbm, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰ = CaseSetup.build_domain(method, cutgeo, cutgeo_facets, geo, model)
+    end
+
+    # Constructing quadratures
+    @timeit to "quadratures $order, $nₓ" begin
+    dΩwsbm, dΓ₁, dΓ₂, dE⁰ = CaseSetup.set_measures(degree, Ωwsbm, Γ₁, Γ₂, E⁰)
     end
 
     # Constructing a reference sbm Interior (present in all 4 methods)
     Ωsbm, _, _, _, _ = CaseSetup._build_domain_sbm(cutgeo, geo, model)
     dΩsbm = Measure(Ωsbm, degree)
 
-    # Constructing quadratures
-    @timeit to "quadratures $order, $nₓ" begin
-    dΩ⁻, dΓ₁, dΓ₂, dE⁰ = CaseSetup.set_measures(degree, Ω⁻, Γ₁, Γ₂, E⁰)
-    end
-
     # Constructing FE Spaces
     @timeit to "spaces $order, $nₓ" begin
-    V, U = CaseSetup.set_spaces(order, Ω⁻act, ϕ₀)
+    V, U = CaseSetup.set_spaces(order, Ωwsbm, ϕ₀)
     end
 
     # Constructing weak form
@@ -57,9 +57,18 @@ for order in orders
     a, l = CaseSetup.weak_form(method)
     end
 
+    # Constructing normal + distance + shifted functions
+    @timeit to "distances $order, $nₓ" begin
+      d, n, f₂sbm = CaseSetup.analytical_distance(model,Lₓ,L₃,R,f₂)
+    end
+
+    @timeit to "volume_fraction $order, $nₓ" begin
+    w_α = CaseSetup.volume_fraction(cutgeo, Ωwsbm)
+    end
+
     # Constructing the matrices
     @timeit to "affine $order, $nₓ" begin
-    op = CaseSetup.build_operator(a(dΩ⁻,dE⁰,nE⁰,h,γg,order),l(dΩ⁻,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂),U,V)
+    op = CaseSetup.build_operator(a(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order),l(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm,Γ₁,E⁰),U,V)
     end
 
     # Calculating L1 norm condition number 
@@ -76,7 +85,10 @@ for order in orders
     push!(l2norms,l2norm_sbm)
 
     # Writing results to vtk
-    CaseSetup.write_results_omg(nₓ, order, ϕₕ ,ϕ₀ , Ω⁻, Ωsbm;folder=folder)
+    CaseSetup.write_results_omg(nₓ, order, ϕₕ ,ϕ₀ , Ωwsbm, Ωsbm;folder=folder)
+    writevtk(Γ₁,"test",cellfields=["n"=>CellField(n(0),Γ₁),"d"=>CellField(d(0),Γ₁),"f2sbm"=>CellField(f₂sbm(0),Γ₁)])
+    writevtk(E⁰,"teste",cellfields=["n"=>CellField(n(0),E⁰),"d"=>CellField(d(0),E⁰),"f2sbm"=>CellField(f₂sbm(0),E⁰),"normsur+"=>CellField(nE⁰.⁺,E⁰),"normsur-"=>CellField(nE⁰.⁻,E⁰)])
+    CaseSetup.write_results_gam(nₓ, order, Γ₁, nΓ₁, Γ₂, nΓ₂;folder=folder)
 
   end # for
   push!(l2s, l2norms)
@@ -92,5 +104,5 @@ CaseSetup.plot_cond(nₓ_vec, orders, cns; title=method*" "*case*" condition num
 # display(plt2)
 show(to)
 end # function
-cutfem()
+wsbm()
 end # module

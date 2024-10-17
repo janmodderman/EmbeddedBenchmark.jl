@@ -70,12 +70,12 @@ function weak_form(method::String; stl_flag=false)
     # =============================WSBM=============================
     # Bilinear form (ANALYTICAL)
     a41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order) = (ϕ,v) -> ∫(∇(ϕ)⋅w_α(∇(v)))dΩ + 
-                                            ∫((jump(nΓ₁*w_α(v))⊙(((∇∇(ϕ)⋅d(0) + ∇(ϕ))⋅n(0)*(0)) - ∇(ϕ))))dΓ₁ +
+                                            ∫(((nΓ₁*w_α(v))⊙(((∇∇(ϕ)⋅d(0) + ∇(ϕ))⋅n(0)*(0)) - ∇(ϕ))))dΓ₁ +
                                             ∫(jump(nE⁰*w_α(v))⋅mean(((∇∇(ϕ)⋅d(0) + ∇(ϕ))⋅n(0))*n(0) - ∇(ϕ)))dE⁰ +
                                             ∫((γg[1]*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰ +  # GP stabilization on gradients first order
                                             ∫((order>1)*(γg[2]*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰ # GP stabilization on gradients second order
     # Righthand side (ANALYTICAL)
-    l41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm,Γ₁,E⁰) = v -> ∫(f₁(0)*w_α(v))dΩ + ∫( (jump(nΓ₁*w_α(v))*n(0))⋅((CellField(f₂sbm(0),Γ₁)⋅n(0))) )dΓ₁ + ∫( (jump(nE⁰*w_α(v))⋅n(0))*(CellField(f₂sbm(0),E⁰)⋅n(0)))dE⁰ + ∫((nΓ₂⋅f₂(0))*w_α(v))dΓ₂  
+    l41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm,Γ₁,E⁰) = v -> ∫(f₁(0)*w_α(v))dΩ + ∫( (jump(nΓ₁*w_α(v))⋅n(0))*((CellField(f₂sbm(0),Γ₁)⋅n(0))) )dΓ₁ + ∫( (jump(nE⁰*w_α(v))⋅n(0))*(CellField(f₂sbm(0),E⁰)⋅n(0)))dE⁰ + ∫((nΓ₂⋅f₂(0))*w_α(v))dΓ₂  
     # ==============================================================
     # Bilinear form (STL)
     a42(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order) = (ϕ,v) -> ∫(∇(ϕ)⋅w_α(∇(v)))dΩ + 
@@ -116,7 +116,7 @@ function setup_model_3d(nₓ::Int64;Lₓ=0.5, L₃=0.25, func_args=[])
     model = CartesianDiscreteModel(domain,(nₓ,nₓ,nₓ/2))
     labels = get_face_labeling(model)
     add_tag_from_tags!(labels, "top", [22])
-    add_tag_from_tags!(labels, "DC", [21,23,24,25,26])
+    add_tag_from_tags!(labels, "DC", [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26])
 
     # ANALYTICAL FUNCTION DEFINITIONS
     g,k,η₀,ω = func_args
@@ -196,7 +196,14 @@ function _build_domain_sbm(cutgeo::EmbeddedDiscretization, geo::Geometry, model:
 end # function
 
 function _build_domain_wsbm(cutgeo::EmbeddedDiscretization, geo::Geometry, model::DiscreteModel)
-    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_domain_sbm(cutgeo, geo, model; var=[0,1])
+    Ω⁻act, _, _, _, _ = _build_domain_sbm(cutgeo, geo, model; var=[0,1])
+    # Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_domain_sbm(cutgeo, geo, model; var=[0,1])
+    # Ω⁻act = Interior(cutgeo, ACTIVE_OUT)
+    new_ind = setdiff(BoundaryTriangulation(Ω⁻act).dtrian.glue.face_to_bgface, BoundaryTriangulation(Ω⁻act,tags=["top","DT"]).dtrian.glue.face_to_bgface)
+    Γ₁ = BoundaryTriangulation(Ω⁻act, new_ind) #Interface(Interior(model), Ω⁻act).⁻
+    nΓ₁ = get_normal_vector(Γ₁)
+    Γ₂ = BoundaryTriangulation(Ω⁻act, tags=["top"])
+    nΓ₂ = get_normal_vector(Γ₂)
     E⁰ = GhostSkeleton(cutgeo, ACTIVE_OUT)
     nE⁰ = get_normal_vector(E⁰)
     return Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰
@@ -232,9 +239,14 @@ function analytical_distance(model::DiscreteModel,Lₓ::Float64,L₃::Float64,R:
     end # if
     D(x,t) = pmid - x
     absD(x,t) = sqrt(D(x,t)⋅D(x,t))
+
+
+
     dist(x,t) = absD(x,t) - R
+    # n(x,t) =  D(x,t)./absD(x,t)
     n(x,t) = (dist(x,t)>=0.0)*(D(x,t)./absD(x,t)) - (dist(x,t)<0.0)*(D(x,t)./absD(x,t))
-    d(x,t) = abs(dist(x,t))*n(x,t)
+    # d(x,t) = (dist(x,t)>=0.0)*n(x,t)*dist(x,t) - (dist(x,t)<0.0)*n(x,t)*dist(x,t)
+    d(x,t) = abs(dist(x,t))*n(x,t) #abs(dist(x,t))*n(x,t)
     d(t) = x -> d(x,t)
     n(t) = x -> n(x,t)
     funsbm(t) = x -> fun(x + d(x,t),t)
