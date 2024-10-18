@@ -1,0 +1,118 @@
+module ModAgfem
+using Gridap
+using Plots
+using GridapEmbedded
+using DrWatson
+using DataFrames:DataFrame
+using DataFrames:Matrix
+using TimerOutputs
+using LinearAlgebra
+using STLCutters
+include("../src/case_setup.jl")
+
+function agfem(case;plot_flag=false, time_flag=false)
+method = "agfem"
+(nₓ_vec, orders), (Lₓ, L₃, R), (g, k, ω, η₀), _, (ls, to), folder = CaseSetup.parameters(method, case)
+
+# start loops
+l2s = []
+cns = []
+for order in orders
+  degree = 2*order
+  l2norms = Float64[]
+  cnlist = Float64[]
+  for nₓ in nₓ_vec
+    # Setting up the model domain and MMS
+    if case == "cylinder"
+      @timeit to "model $order, $nₓ" begin
+        model, _, ϕ₀, f₁, f₂ = CaseSetup.setup_model_2d(nₓ;Lₓ=Lₓ,L₃=L₃,func_args=[g,k,η₀,ω])
+      end
+    else
+      @timeit to "model $order, $nₓ" begin
+        model, _, ϕ₀, f₁, f₂ = CaseSetup.setup_model_3d(nₓ;Lₓ=Lₓ,L₃=L₃,func_args=[g,k,η₀,ω])
+      end
+    end # if
+
+    # Cutting the model domain
+    if case == "cylinder" || case == "sphere"
+      @timeit to "cutting $order, $nₓ" begin
+        cutgeo, cutgeo_facets = CaseSetup.geometry_cut(model;Lₓ=Lₓ, L₃=L₃, R=R)
+      end
+      geo = get_geometry(cutgeo)
+    else
+      if case == "sphere_stl"
+        geo = STLGeometry("data/meshes/sphere.stl")
+      else
+        geo = STLGeometry("data/meshes/bunnylow.stl")
+      end # if
+      @timeit to "cutting $order, $nₓ" begin
+        cutgeo, cutgeo_facets = CaseSetup.geometry_cut(model, geo)
+      end
+    end # if
+
+    # Constructing the Interior and Boundaries
+    @timeit to "domain $order, $nₓ" begin
+      Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = CaseSetup.build_domain(method, cutgeo, cutgeo_facets)
+    end
+
+    # Constructing a reference sbm Interior (present in all 4 methods)
+    Ωsbm, _, _, _, _ = CaseSetup.build_reference_domain(cutgeo)
+    dΩsbm = Measure(Ωsbm, degree)
+
+    # Constructing quadratures
+    @timeit to "quadratures $order, $nₓ" begin
+      dΩ⁻, dΓ₁, dΓ₂ = CaseSetup.set_measures(degree, Ω⁻, Γ₁, Γ₂)
+    end
+
+    # Constructing FE Spaces
+    @timeit to "spaces $order, $nₓ" begin
+      V, U = CaseSetup.set_spaces(order, Ω⁻act, ϕ₀, cutgeo, geo)
+    end
+
+    # Constructing weak form
+    @timeit to "weak_form $order, $nₓ" begin
+      a, l = CaseSetup.weak_form(method)
+    end
+
+    # Constructing the matrices
+    @timeit to "affine $order, $nₓ" begin
+      op = CaseSetup.build_operator(a(dΩ⁻),l(dΩ⁻,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂),U,V)
+    end
+
+    # Calculating L1 norm condition number 
+    push!(cnlist, CaseSetup.get_cond(op))
+
+    # Solve the problem
+    @timeit to "solving $order, $nₓ" begin
+      ϕₕ = solve(ls, op)
+    end
+
+    # Calculate L2 norm on the method domain and on the sbm domain
+    # l2norm = CaseSetup.L2norm(dΩ⁻,ϕₕ,ϕ₀(0.0))
+    l2norm_sbm = CaseSetup.L2norm(dΩsbm,ϕₕ,ϕ₀(0.0))
+    push!(l2norms,l2norm_sbm)
+
+    # Writing results to vtk
+    CaseSetup.write_results_omg(nₓ, order, ϕₕ ,ϕ₀ , Ω⁻, Ωsbm;folder=folder)
+
+  end # for
+  push!(l2s, l2norms)
+  push!(cns, cnlist)
+end # for
+
+if plot_flag
+  plt = plot(legend=:bottomleft)
+  CaseSetup.plot_L2(nₓ_vec, orders, l2s;marker=:diamond, title=method*" "*case*" L2 norm error")
+  display(plt)
+
+  plt2 = plot(legend=:bottomleft)
+  CaseSetup.plot_cond(nₓ_vec, orders, cns;marker=:diamond, title=method*" "*case*" condition number")
+  display(plt2)
+end # if
+if time_flag
+  show(to)
+end # if
+  return nₓ_vec, orders, l2s, cns, to
+end # function
+
+end # module
