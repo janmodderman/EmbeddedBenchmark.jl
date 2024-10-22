@@ -9,10 +9,10 @@ using LinearAlgebra
 using CSV
 
 include("../src/case_setup.jl")
-include("agfem.jl")
-include("cutfem.jl")
-include("sbm.jl")
-include("wsbm.jl")
+include("../src/agfem.jl")
+include("../src/cutfem.jl")
+include("../src/sbm.jl")
+include("../src/wsbm.jl")
 
 function execute(nruns::Int64,cases::Vector;plot_flag=false,print_flag=false)
 

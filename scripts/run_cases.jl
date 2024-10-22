@@ -9,10 +9,10 @@ using TimerOutputs
 using LinearAlgebra
 
 include("../src/case_setup.jl")
-include("agfem.jl")
-include("cutfem.jl")
-include("sbm.jl")
-include("wsbm.jl")
+include("../src/agfem.jl")
+include("../src/cutfem.jl")
+include("../src/sbm.jl")
+include("../src/wsbm.jl")
 
 function execute(cases;plot_flag=false)
 
