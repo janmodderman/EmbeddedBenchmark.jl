@@ -31,10 +31,10 @@ orderslist = []
 # cases =  ["cylinder","sphere","sphere_stl","stanford"]
 # cases =  ["sphere_stl","stanford"]
 for case in cases
-    _, _, l2s1, cns1, _ = ModAgfem.agfem(case)
-    _, _, l2s2, cns2, _ = ModCutfem.cutfem(case)
-    _, _, l2s3, cns3, _ = ModSbm.sbm(case)
-    nₓ, orders, l2s4, cns4, _ = ModWsbm.wsbm(case)
+    _, _, l2s1, cns1, _ = ModAgfem.agfem(case,nx; vtk_flag=true)
+    _, _, l2s2, cns2, _ = ModCutfem.cutfem(case,nx; vtk_flag=true)
+    _, _, l2s3, cns3, _ = ModSbm.sbm(case,nx; vtk_flag=true)
+    nₓ, orders, l2s4, cns4, _ = ModWsbm.wsbm(case,nx; vtk_flag=true)
     push!(l2s_agfem,l2s1)
     push!(l2s_cutfem,l2s2)
     push!(l2s_sbm,l2s3)

@@ -10,9 +10,9 @@ using LinearAlgebra
 using STLCutters
 include("../src/case_setup.jl")
 
-function agfem(case;plot_flag=false, time_flag=false)
+function agfem(case::String, nₓ_vec::Vector;plot_flag=false, time_flag=false, vtk_flag=false)
 method = "agfem"
-(nₓ_vec, orders), (Lₓ, L₃, R), (g, k, ω, η₀), _, (ls, to), folder = CaseSetup.parameters(method, case)
+orders, (Lₓ, L₃, R), (g, k, ω, η₀), _, (ls, to), folder = CaseSetup.parameters(method, case)
 
 # start loops
 l2s = []
@@ -93,7 +93,9 @@ for order in orders
     push!(l2norms,l2norm_sbm)
 
     # Writing results to vtk
-    CaseSetup.write_results_omg(nₓ, order, ϕₕ ,ϕ₀ , Ω⁻, Ωsbm;folder=folder)
+    if vtk_flag
+      CaseSetup.write_results_omg(nₓ, order, ϕₕ ,ϕ₀ , Ω⁻, Ωsbm;folder=folder)
+    end
 
   end # for
   push!(l2s, l2norms)

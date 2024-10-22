@@ -1,2 +1,4 @@
 # ignore ALL files in ANY directory named temp
 data/sims/
+data/exp_raw/
+data/exp_pro/

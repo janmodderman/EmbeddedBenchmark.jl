@@ -19,11 +19,6 @@ include("stl_distance.jl")
 # FUNCTION TO SET UP PARAMETERS
 function parameters(method::String, case::String)
     # Number of elements & element orders
-    if case == "cylinder"
-        nₓ = [8,16,32]#,32,64,128,256,512]
-    else
-        nₓ = [12,16,20]#,16,24,32]
-    end # if
     orders = [1,2]
 
     # Geometrical parameters
@@ -47,7 +42,7 @@ function parameters(method::String, case::String)
     # output folder
     folder = "data/sims/"*method*"/"*case*"/"
 
-    return (nₓ, orders), (Lₓ, L₃, R), (g, k, ω, η₀), γg, (ls, to), folder
+    return orders, (Lₓ, L₃, R), (g, k, ω, η₀), γg, (ls, to), folder
 end # function
 
 # FUNCTION THAT RETURNS THE CORRECT WEAK FORM FOR AGFEM, CUTFEM, SBM & WSBM FOR BOTH ANALYTICAL & STL GEOMETRIES
