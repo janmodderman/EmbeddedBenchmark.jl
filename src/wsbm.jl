@@ -17,6 +17,7 @@ orders, (Lₓ, L₃, R), (g, k, ω, η₀), γg, (ls, to), folder = CaseSetup.pa
 # start loops
 l2s = []
 cns = []
+tos = []
 for order in orders
   degree = 2*order
   l2norms = Float64[]
@@ -53,16 +54,18 @@ for order in orders
 
     # Constructing the Interior and Boundaries
     @timeit to "domain $order, $nₓ" begin
-      Ωwsbm, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰ = CaseSetup.build_domain(method, cutgeo, cutgeo_facets)
+      Ωwsbm, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, (Ωsbm,Ωsbmₒ) = CaseSetup.build_domain(method, cutgeo, cutgeo_facets)
     end
 
     # Constructing a reference sbm Interior (present in all 4 methods)
-    Ωsbm, _, _, _, _ = CaseSetup.build_reference_domain(cutgeo)
-    dΩsbm = Measure(Ωsbm, degree)
+    # Ωsbm, _, _, _, _ = CaseSetup.build_reference_domain(cutgeo)
+    # dΩsbm = Measure(Ωsbm, degree)
 
     # Constructing quadratures
     @timeit to "quadratures $order, $nₓ" begin
       dΩwsbm, dΓ₁, dΓ₂, dE⁰ = CaseSetup.set_measures(degree, Ωwsbm, Γ₁, Γ₂, E⁰)
+      dΩsbm = Measure(Ωsbm, degree)
+      dΩsbmₒ = Measure(Ωsbmₒ, degree)
     end
 
     # Constructing FE Spaces
@@ -73,13 +76,17 @@ for order in orders
     # Constructing weak form
     if case == "cylinder" || case == "sphere"
       @timeit to "weak_form $order, $nₓ" begin
-        a, l = CaseSetup.weak_form(method)
+        arrₐ, l = CaseSetup.weak_form(method)
       end
     else
       @timeit to "weak_form $order, $nₓ" begin
-        a, l = CaseSetup.weak_form(method;stl_flag=true)
+        arrₐ, l = CaseSetup.weak_form(method;stl_flag=true)
       end
     end # if
+
+    aₒ = arrₐ[1]
+    aₑ = arrₐ[3]
+    aᵧ = arrₐ[2]
 
     # Constructing normal + distance + shifted functions
     if case == "cylinder" || case == "sphere"
@@ -93,19 +100,26 @@ for order in orders
     end # if
 
     @timeit to "volume_fraction $order, $nₓ" begin
-      w_α = CaseSetup.volume_fraction(cutgeo, Ωwsbm)
+      α = CaseSetup.volume_fraction(cutgeo, Ωwsbm)
+      # αₒ = CellState(0.0,dΩwsbm)
+      # update_state!((a,b) -> (true,b),αₒ,α)
     end
 
     # Constructing the matrices
-    if case == "cylinder" || case == "sphere"
-      @timeit to "affine $order, $nₓ" begin
-        op = CaseSetup.build_operator(a(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order),l(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm,Γ₁,E⁰),U,V)
-      end
-    else
-      @timeit to "affine $order, $nₓ" begin
-        op = CaseSetup.build_operator(a(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order),l(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm),U,V)
-      end
-    end # if
+    @timeit to "interior_matrix $order, $nₓ" Ai = assemble_matrix(aₒ(dΩsbm,dΩsbmₒ,α),U,V)
+    # @timeit to "interior_matrix $order, $nₓ" Ai = assemble_matrix(aₒ(dΩwsbm,α),U,V)
+    @timeit to "ghost_penalty_matrix $order, $nₓ" Agp = assemble_matrix(aₑ(dE⁰,nE⁰,h,γg,Val(order)),U,V)
+    @timeit to "shifted_edges_matrix $order, $nₓ" Ae = assemble_matrix(aₑ(dE⁰,nE⁰,n,d,α),U,V)
+    @timeit to "shifted_boundary_matrix $order, $nₓ" Ag = assemble_matrix(aᵧ(dΓ₁,nΓ₁,n,d,α),U,V)
+    @timeit to "rhs $order, $nₓ" b = assemble_vector(l(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,α,f₁,f₂,f₂sbm),V)
+
+    @timeit to "affine $order, $nₓ" begin
+      A = Ai+Ae+Ag+Agp
+      b = get_vector(AffineFEOperator(aₒ(dΩsbm,dΩsbmₒ,α),l(dΩwsbm,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,α,f₁,f₂,f₂sbm),U,V))
+      # TO DO: not efficient like this, should find a way to attach constraints on vector b as defined in rhs
+      op = AffineFEOperator(U,V,A,b)
+    end
+
 
     # Calculating L1 norm condition number 
     push!(cnlist, CaseSetup.get_cond(op))
@@ -129,6 +143,7 @@ for order in orders
   end # for
   push!(l2s, l2norms)
   push!(cns, cnlist)
+  push!(tos, to)
 end # for
 
 if plot_flag
@@ -144,7 +159,7 @@ end # if
 if time_flag
   show(to)
 end # if
-  return nₓ_vec, orders, l2s, cns, to
+  return nₓ_vec, orders, l2s, cns, tos
 end # function
 
 end # module

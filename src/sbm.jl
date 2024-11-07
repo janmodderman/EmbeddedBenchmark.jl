@@ -17,6 +17,7 @@ orders, (Lₓ, L₃, R), (g, k, ω, η₀), _, (ls, to), folder = CaseSetup.para
 # start loops
 l2s = []
 cns = []
+tos = []
 for order in orders
   degree = 2*order
   l2norms = Float64[]
@@ -68,13 +69,15 @@ for order in orders
     # Constructing weak form
     if case == "cylinder" || case == "sphere"
       @timeit to "weak_form $order, $nₓ" begin
-        a, l = CaseSetup.weak_form(method)
+        arrₐ, l = CaseSetup.weak_form(method)
       end
     else
       @timeit to "weak_form $order, $nₓ" begin
-        a, l = CaseSetup.weak_form(method;stl_flag=true)
+        arrₐ, l = CaseSetup.weak_form(method;stl_flag=true)
       end
     end # if
+    aₒ = arrₐ[1]
+    aᵧ = arrₐ[2]
 
     # Constructing normal + distance + shifted functions
     if case == "cylinder" || case == "sphere"
@@ -83,13 +86,20 @@ for order in orders
       end
     else
       @timeit to "distances $order, $nₓ" begin
-        d, n, f₂sbm = CaseSetup.stl_distance(model,geo,Γ₁,dΓ₁,f₂)
+      d, n, f₂sbm = CaseSetup.stl_distance(model,geo,Γ₁,dΓ₁,f₂)
       end
     end # if
 
     # Constructing the matrices
+    @timeit to "interior_matrix $order, $nₓ" Ai = assemble_matrix(aₒ(dΩsbm),U,V)
+    @timeit to "shifted_boundary_matrix $order, $nₓ" Ag = assemble_matrix(aᵧ(dΓ₁,nΓ₁,n,d),U,V)
+    @timeit to "rhs $order, $nₓ" b = assemble_vector(l(dΩsbm,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm),V)
+
     @timeit to "affine $order, $nₓ" begin
-      op = CaseSetup.build_operator(a(dΩsbm,dΓ₁,nΓ₁,n,d),l(dΩsbm,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm),U,V)
+      A = Ai+Ag
+      b = get_vector(AffineFEOperator(aₒ(dΩsbm),l(dΩsbm,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm),U,V))
+      # TO DO: not efficient like this, should find a way to attach constraints on vector b as defined in rhs
+      op = AffineFEOperator(U,V,A,b)
     end
 
     # Calculating L1 norm condition number 
@@ -114,6 +124,7 @@ for order in orders
   end # for
   push!(l2s, l2norms)
   push!(cns, cnlist)
+  push!(tos, to)
 end # for
 
 if plot_flag
@@ -129,7 +140,7 @@ end # if
 if time_flag
   show(to)
 end # if
-  return nₓ_vec, orders, l2s, cns, to
+  return nₓ_vec, orders, l2s, cns, tos
 end # function
 
 end # module

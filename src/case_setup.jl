@@ -9,6 +9,7 @@ using TimerOutputs
 using LinearAlgebra
 using STLCutters
 
+using Gridap.Geometry: SkeletonPair
 using GridapEmbedded.Interfaces
 using GridapEmbedded.Interfaces: AbstractEmbeddedDiscretization
 using GridapEmbedded.CSG
@@ -30,10 +31,10 @@ function parameters(method::String, case::String)
     g = 9.81                    # [m/s²]: gravitational constant
     k = 2π/L₃                   # [rad/m]: wave number
     ω = sqrt(g*k*tanh(k*L₃))    # [rad/s]: dispersion relation ocean waves
-    η₀ = 0.1                    # [m]: wave amplitude
+    η₀ = 0.05                    # [m]: wave amplitude
 
     # Ghost Penalty parameters per order 
-    γg = (0.1,0.1)      # currently allows up to 2ⁿᵈ order
+    γg = 0.1      # currently allows up to 2ⁿᵈ order
 
     # solving & timing variables
     ls = LUSolver()     # Lienar Solver
@@ -47,65 +48,105 @@ end # function
 
 # FUNCTION THAT RETURNS THE CORRECT WEAK FORM FOR AGFEM, CUTFEM, SBM & WSBM FOR BOTH ANALYTICAL & STL GEOMETRIES
 function weak_form(method::String; stl_flag=false, GP_flag=true)
-    # =============================AGFEM=============================
-    # Bilinear form
-    a1(dΩ) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ
-    # Righthand side
-    l1(dΩ,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂) = v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅f₂(0))*v)dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂
-    # =============================CUTFEM=============================
-    # Bilinear form
-    a2(dΩ,dE⁰,nE⁰,h,γg,order) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ + 
-                                ∫((GP_flag)*(γg[1]*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰ +  # GP stabilization on gradients first order
-                                ∫((GP_flag)*(order>1)*(γg[2]*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰ # GP stabilization on gradients second order
-    # Righthand side
-    l2(dΩ,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂) = v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅f₂(0))*v)dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂
-    # =============================SBM=============================
-    # Bilinear form (ANALYTICAL)
-    a31(dΩ,dΓ₁,nΓ₁,n,d) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ + 
-                                ∫((nΓ₁⋅((((d(0)⋅∇∇(ϕ)) + ∇(ϕ))⋅n(0))*n(0) - ∇(ϕ)))*v)dΓ₁
-    # Righthand side (ANALYTICAL)
-    l31(dΩ,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm) = v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅(((v*f₂sbm(0))⋅n(0))*n(0))))dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂ 
-    # =============================================================
-    # Bilinear form (STL)
-    a32(dΩ,dΓ₁,nΓ₁,n,d) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ + 
-                                ∫((nΓ₁⋅((((d[1]⋅∇∇(ϕ)) + ∇(ϕ))⋅n[1])*n[1] - ∇(ϕ)))*v)dΓ₁
-    # Righthand side (STL)
-    l32(dΩ,dΓ₁,nΓ₁,dΓ₂,nΓ₂,n,f₁,f₂,f₂sbm) = v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅((f₂sbm[1]⋅n[1])*n[1]))*v)dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂ 
-    # =============================WSBM=============================
-    # Bilinear form (ANALYTICAL)
-    a41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order) = (ϕ,v) -> ∫(∇(ϕ)⋅w_α(∇(v)))dΩ + 
-                                            ∫(((nΓ₁*w_α(v))⊙(((∇∇(ϕ)⋅d(0) + ∇(ϕ))⋅n(0)*n(0)) - ∇(ϕ))))dΓ₁ +
-                                            ∫(jump(nE⁰*w_α(v))⋅mean(((∇∇(ϕ)⋅d(0) + ∇(ϕ))⋅n(0))*n(0) - ∇(ϕ)))dE⁰ +
-                                            ∫((GP_flag)*(γg[1]*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰ +  # GP stabilization on gradients first order
-                                            ∫((GP_flag)*(order>1)*(γg[2]*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰ # GP stabilization on gradients second order
-    # Righthand side (ANALYTICAL)
-    l41(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm,Γ₁,E⁰) = v -> ∫(f₁(0)*w_α(v))dΩ + ∫( ((nΓ₁*w_α(v))⋅n(0))*((CellField(f₂sbm(0),Γ₁)⋅n(0))) )dΓ₁ + ∫( (jump(nE⁰*w_α(v))⋅n(0))*(CellField(f₂sbm(0),E⁰)⋅n(0)))dE⁰ + ∫((nΓ₂⋅f₂(0))*w_α(v))dΓ₂  
-    # ==============================================================
-    # Bilinear form (STL)
-    a42(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,n,d,w_α,h,γg,order) = (ϕ,v) -> ∫(∇(ϕ)⋅w_α(∇(v)))dΩ + 
-                                            ∫(((nΓ₁*w_α(v))⊙(((∇∇(ϕ)⋅d[1] + ∇(ϕ))⋅n[1]*n[1]) - ∇(ϕ))))dΓ₁ +
-                                            ∫(jump(nE⁰*w_α(v))⋅(((mean(∇∇(ϕ))⋅d[2] + mean(∇(ϕ)))⋅n[2])*n[2] - mean(∇(ϕ))) )dE⁰ +
-                                            ∫((GP_flag)*(γg[1]*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰ +  # GP stabilization on gradients first order
-                                            ∫((GP_flag)*(order>1)*(γg[2]*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰ # GP stabilization on gradients second order
-    # Righthand side (STL)
-    l42(dΩ,dΓ₁,nΓ₁,dE⁰,nE⁰,dΓ₂,nΓ₂,n,w_α,f₁,f₂,f₂sbm) = v -> ∫(f₁(0)*w_α(v))dΩ + ∫( (nΓ₁*w_α(v))⋅((f₂sbm[1]⋅n[1])*n[1]) )dΓ₁ + ∫( jump(nE⁰*w_α(v))⋅((f₂sbm[2]⋅n[2])*n[2]))dE⁰ + ∫((nΓ₂⋅f₂(0))*w_α(v))dΓ₂ 
+    
+    s(∇ϕ,∇∇ϕ,d,n) = ((∇∇ϕ⋅d + ∇ϕ)⋅n)*n - ∇ϕ     # shifting operator
+    sᵣ(fun::CellField,n::CellField) = n*(n⋅fun) # rhs shifting operator
+    w_α(α,w) = α*w                              # weighting test function
+    w_α(α,w,v) = α*(w⋅v)                              # weighting test function interior grad grad
+
+    function _cellfield_helper(trian::Triangulation,fun::Function)
+        CellField(fun(0),trian)
+    end # function
+    
+    function _shifted_helper(trian::Triangulation,fun1::Function,fun2::Function)
+        _shifted_helper(trian, fun1), _shifted_helper(trian, fun2)
+    end # function
+
+    function _shifted_helper(trian::Triangulation,fun::Function)
+        _cellfield_helper(trian, fun)
+    end # function
+
+    function _setup_rhs_base(trian1::Triangulation,trian2::Triangulation,fun1::Function,fun2::Function)
+        _cellfield_helper(trian1,fun1), _cellfield_helper(trian2,fun2)
+    end # function
+
+    # =============================BILINEAR FORM=============================
+    # Interior 
+    aₒ(dΩ::Measure) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ                                                                   # Laplacian for all cases except WSBM
+    aₒ(dΩᵢ::Measure,dΩₒ::Measure,α::CellField) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩᵢ + ∫((w_α∘(α,∇(ϕ),∇(v))))dΩₒ           # Laplacian for WSBM
+    # TO DO: make this work for w_\alpha with dOmegawsbm, instead of split and make sure interior_matrix does not become too large. 
+
+    # Edges
+    aₑ(dE⁰::Measure,nE⁰::SkeletonPair,h::Float64,γg::Float64,::Val{1}) = 
+        (ϕ,v) -> ∫((γg*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰                                                 # GP stabilization on gradients first order
+    aₑ(dE⁰::Measure,nE⁰::SkeletonPair,h::Float64,γg::Float64,::Val{2}) = 
+        (ϕ,v) -> ∫((γg*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)) + (γg*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰    # GP stabilization on gradients first order
+    function aₑ(dE⁰::Measure,nE⁰::SkeletonPair,n::Function,d::Function,α::CellField) 
+        dcf, ncf = _shifted_helper(dE⁰.quad.trian,d,n)
+        (ϕ,v) -> ∫(jump(nE⁰*(w_α∘(α,v)))⋅((s∘(∇(ϕ).⁺,∇∇(ϕ).⁺,dcf,ncf))+(s∘(∇(ϕ).⁻,∇∇(ϕ).⁻,dcf,ncf)))*0.5)dE⁰         # WSBM edges + Function
+    end # function
+    aₑ(dE⁰::Measure,nE⁰::SkeletonPair,n::Tuple,d::Tuple,α::CellField) =
+        (ϕ,v) -> ∫(jump(nE⁰*(w_α∘(α,v)))⋅ ((((mean(∇∇(ϕ))⋅d[2]) + mean(∇(ϕ)))⋅n[2])*n[2] - mean(∇(ϕ))) )dE⁰          # WSBM edges + Tuple
+
+    # Boundary
+    function aᵧ(dΓ₁::Measure,nΓ₁::CellField,n::Function,d::Function) 
+        dcf, ncf = _shifted_helper(dΓ₁.quad.trian,d,n)
+        (ϕ,v) -> ∫(nΓ₁⋅(s∘(∇(ϕ),∇∇(ϕ),dcf,ncf))*v)dΓ₁                                                           # SBM boundary + Function (analytical)
+    end # function
+    aᵧ(dΓ₁::Measure,nΓ₁::CellField,n::Tuple,d::Tuple) = 
+        (ϕ,v) -> ∫((nΓ₁⋅((((d[1]⋅∇∇(ϕ)) + ∇(ϕ))⋅n[1])*n[1] - ∇(ϕ)))*v)dΓ₁                                       # SBM boundary + Tuple (STL)
+    function aᵧ(dΓ₁::Measure,nΓ₁::CellField,n::Function,d::Function,α::CellField)
+        dcf, ncf = _shifted_helper(dΓ₁.quad.trian,d,n)
+        (ϕ,v) -> ∫(nΓ₁⋅(s∘(∇(ϕ),∇∇(ϕ),dcf,ncf))*(w_α∘(α,v)))dΓ₁                                                      # WSBM boundary + Function (analytical)
+    end # function
+    aᵧ(dΓ₁::Measure,nΓ₁::CellField,n::Tuple,d::Tuple,α::CellField) = 
+        (ϕ,v) -> ∫((nΓ₁⋅((((d[1]⋅∇∇(ϕ)) + ∇(ϕ))⋅n[1])*n[1] - ∇(ϕ)))*(w_α∘(α,v)))dΓ₁                                  # WSBM boundary + Tuple (STL)
+
+    # =============================RIGHTHAND SIDE=============================
+    function l(dΩ::Measure,dΓ₁::Measure,nΓ₁::CellField,dΓ₂::Measure,nΓ₂::CellField,
+        f₁::Function,f₂::Function)  
+            f1cf, f2cf₂ = _setup_rhs_base(dΩ.quad.trian,dΓ₂.quad.trian,f₁,f₂)
+            f2cf₁ = _cellfield_helper(dΓ₁.quad.trian,f₂)
+                # v -> ∫(f1cf*v)dΩ + ∫((nΓ₁⋅f2cf₁)*v)dΓ₁ + ∫((nΓ₂⋅f2cf₂)*v)dΓ₂                                    # Non-shifted righthand side
+                v -> ∫(f₁(0)*v)dΩ + ∫((nΓ₁⋅f₂(0))*v)dΓ₁ + ∫((nΓ₂⋅f₂(0))*v)dΓ₂                                    # Non-shifted righthand side
+    end # function
+    function l(dΩ::Measure,dΓ₁::Measure,nΓ₁::CellField,dΓ₂::Measure,nΓ₂::CellField,
+        n::Function,f₁::Function,f₂::Function,f₂sbm::Function) 
+            f1cf, f2cf = _setup_rhs_base(dΩ.quad.trian,dΓ₂.quad.trian,f₁,f₂)
+            ncf₁, fsbmcf₁ = _shifted_helper(dΓ₁.quad.trian,n,f₂sbm)
+                # v -> ∫(f1cf*v)dΩ + ∫( ((nΓ₁)⋅((v*f₂sbm(0)⋅n(0))*n(0))))dΓ₁ + ∫((nΓ₂⋅f2cf)*v)dΓ₂                       # SBM + Function (analytical)
+                v -> ∫(f1cf*v)dΩ + ∫( ((nΓ₁*v)⋅sᵣ(fsbmcf₁,ncf₁)))dΓ₁ + ∫((nΓ₂⋅f2cf)*v)dΓ₂                       # SBM + Function (analytical)
+    end # function
+    function l(dΩ::Measure,dΓ₁::Measure,nΓ₁::CellField,dΓ₂::Measure,nΓ₂::CellField,
+        n::Tuple,f₁::Function,f₂::Function,f₂sbm::Tuple)  
+            f1cf, f2cf = _setup_rhs_base(dΩ.quad.trian,dΓ₂.quad.trian,f₁,f₂)
+                v -> ∫(f1cf*v)dΩ + ∫((nΓ₁⋅((f₂sbm[1]⋅n[1])*n[1]))*v)dΓ₁ + ∫((nΓ₂⋅f2cf)*v)dΓ₂                    # SBM + Tuple (STL)
+    end # function
+    function l(dΩ::Measure,dΓ₁::Measure,nΓ₁::CellField,dE⁰::Measure,nE⁰::SkeletonPair,dΓ₂::Measure,
+        nΓ₂::CellField,n::Function,α::CellField,f₁::Function,f₂::Function,f₂sbm::Function)
+            f1cf, f2cf = _setup_rhs_base(dΩ.quad.trian,dΓ₂.quad.trian,f₁,f₂)
+            ncf₁,fsbmcf₁ = _shifted_helper(dΓ₁.quad.trian,n,f₂sbm)
+            ncfₑ,fsbmcfₑ = _shifted_helper(dE⁰.quad.trian,n,f₂sbm)
+                v -> ∫(f1cf*(w_α∘(α,v)))dΩ + ∫( ((nΓ₁*(w_α∘(α,v)))⋅sᵣ(fsbmcf₁,ncf₁)) )dΓ₁ + 
+                    # ∫( (jump(nE⁰*(w_α∘(α,v)))⋅((f₂sbm(0)⋅n(0))*n(0))))dE⁰ + ∫((nΓ₂⋅f2cf)*(w_α∘(α,v)))dΓ₂                        # WSBM + Function (analytical)
+                    ∫( (jump(nE⁰*(w_α∘(α,v)))⋅sᵣ(fsbmcfₑ,ncfₑ)))dE⁰ + ∫((nΓ₂⋅f2cf)*(w_α∘(α,v)))dΓ₂                        # WSBM + Function (analytical)
+    end # function
+    function l(dΩ::Measure,dΓ₁::Measure,nΓ₁::CellField,dE⁰::Measure,nE⁰::SkeletonPair,dΓ₂::Measure,
+        nΓ₂::CellField,n::Tuple,α::CellField,f₁::Function,f₂::Function,f₂sbm::Tuple)  
+            f1cf, f2cf = _setup_rhs_base(dΩ.quad.trian,dΓ₂.quad.trian,f₁,f₂)
+                v -> ∫(f1cf*(w_α∘(α,v)))dΩ + ∫( (nΓ₁*(w_α∘(α,v)))⋅((f₂sbm[1]⋅n[1])*n[1]) )dΓ₁ + 
+                    ∫( jump(nE⁰*(w_α∘(α,v)))⋅((f₂sbm[2]⋅n[2])*n[2]))dE⁰ + ∫((nΓ₂⋅f2cf)*(w_α∘(α,v)))dΓ₂                    # WSBM + Tuple (STL)
+    end # function
     # ==============================END==============================
+    
     if method == "agfem"
-        return a1, l1
+        return (aₒ,), l
     elseif method == "cutfem"
-        return a2, l2
+        return (aₒ,aₑ), l
     elseif method == "sbm"
-        if !stl_flag
-            return a31, l31
-        else
-            return a32, l32
-        end # if
+        return (aₒ,aᵧ), l
     elseif method == "wsbm"
-        if !stl_flag
-            return a41, l41
-        else
-            return a42, l42
-        end # if
+        return (aₒ,aᵧ,aₑ), l
     else
         println("Method unsupported")
         return
@@ -120,8 +161,12 @@ function setup_model_3d(nₓ::Int64;Lₓ=0.5, L₃=0.25, func_args=[])
     model = CartesianDiscreteModel(domain,(nₓ,nₓ,nₓ))
     labels = get_face_labeling(model)
     add_tag_from_tags!(labels, "top", [22])                                                                 # Neumann on the top of the domain
-    add_tag_from_tags!(labels, "DT", [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26])   # Dirichlet Tags
-
+    # add_tag_from_tags!(labels, "DT", [1,2,3,4,5,6,7,8,9,10,11,14,17,18,19,20,23,24,25,26])      # Dirichlet Tags
+    # add_tag_from_tags!(labels, "DT", [9,10,11,12,13,14,15,16,17,18,19,20,23,24,25,26])      # Dirichlet Tags
+    # add_tag_from_tags!(labels, "DT", [1,2,3,4,9,10,13,14,17,18,19,20,23,24,25,26])      # Dirichlet Tags
+    add_tag_from_tags!(labels, "DT", [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,23,24,25,26])      # Dirichlet Tags
+    # add_tag_from_tags!(labels, "DT", [1,2,3,4,5,6,7,8,23,24,25,26])      # Dirichlet Tags
+    writevtk(model,"model")
     # ANALYTICAL FUNCTION DEFINITIONS
     g,k,η₀,ω = func_args
     ϕ₀(x,t) = η₀*g/ω*(cosh(k*(x[3]+L₃))/cosh(k*L₃))*sin(k*x[1] + k*x[2] -ω*t)
@@ -131,6 +176,11 @@ function setup_model_3d(nₓ::Int64;Lₓ=0.5, L₃=0.25, func_args=[])
                        ω*η₀*(cosh(k*(x[3]+L₃))/sinh(k*L₃))*cos(k*x[1] + k*x[2] -ω*t),
                         ω*η₀*(sinh(k*(x[3]+L₃))/sinh(k*L₃))*sin(k*x[1] + k*x[2] -ω*t))
     f₂(t) = x -> f₂(x,t)
+    # f₂(x,t) = ∇(ϕ₀(x,t))
+    # f₂(t) = ∇(ϕ₀(t))#x -> f₂(x,t)
+
+    # f₂(t) = x -> ∇(ϕ₀(t))(x)
+    # f₂(t) = x -> f₂(x,t)
 
     return model, labels, ϕ₀, f₁, f₂
 end # function
@@ -141,7 +191,7 @@ function setup_model_2d(nₓ::Int64;Lₓ=0.5, L₃=0.25, func_args=[])
     model = CartesianDiscreteModel(domain,(nₓ,nₓ))
     labels = get_face_labeling(model)
     add_tag_from_tags!(labels, "top", [6])              # Neumann on the top of the domain
-    add_tag_from_tags!(labels, "DT", [1,2,3,4,5,7,8])   # Dirichlet Tags
+    add_tag_from_tags!(labels, "DT", [1,2,3,4,7,8])   # Dirichlet Tags
 
     # ANALYTICAL FUNCTION DEFINITIONS
     g,k,η₀,ω = func_args
@@ -151,6 +201,13 @@ function setup_model_2d(nₓ::Int64;Lₓ=0.5, L₃=0.25, func_args=[])
     f₂(x,t) = VectorValue(ω*η₀*(cosh(k*(x[2]+L₃))/sinh(k*L₃))*cos(k*x[1] -ω*t),
                         ω*η₀*(sinh(k*(x[2]+L₃))/sinh(k*L₃))*sin(k*x[1] -ω*t))
     f₂(t) = x -> f₂(x,t)
+    # f₂(t) = x -> ∇(ϕ₀(t))(x)
+
+    # f₂(x,t) = VectorValue(η₀*g/ω*k*(cosh(k*(x[2]+L₃))/cosh(k*L₃))*cos(k*x[1] -ω*t),
+    #             η₀*g/ω*k*(sinh(k*(x[2]+L₃))/cosh(k*L₃))*sin(k*x[1] -ω*t))
+    # f₂(t) = x -> f₂(x,t)
+    # f₂(x,t) = ∇(ϕ₀(x,t))
+    # f₂(t) = x -> f₂(x,t)
 
     return model, labels, ϕ₀, f₁, f₂
 end # function
@@ -213,9 +270,11 @@ end # function
 
 function _build_domain_wsbm(cutgeo::EmbeddedDiscretization)
     Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_domain_sbm(cutgeo;flags=(ACTIVE_OUT,IN))
+    Ωsbmᵢ = Interior(cutgeo, OUT)
+    Ωsbmₒ = Interior(cutgeo, CUT)
     E⁰ = GhostSkeleton(cutgeo, ACTIVE_OUT)  # Edges of the cut and bordering active domain
     nE⁰ = get_normal_vector(E⁰)             # Normal vectors of edges
-    return Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰
+    return Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, (Ωsbmᵢ,Ωsbmₒ)
 end # function
 
 # ANALYTICAL DISTANCE FUNCTIONS FOR SBM & WSBM
@@ -286,13 +345,22 @@ function set_measures(degree::Int64, Ω::Triangulation, Γ₁::Triangulation, Γ
 end # function
 
 # VOLUME FRACTION FOR WSBM
-function volume_fraction(cutgeo::EmbeddedDiscretization, Ω⁻act::Triangulation)
-    Ω⁻ = Interior(cutgeo, PHYSICAL_OUT)     # Physical domain
-    vol⁻ = get_cell_measure(Ω⁻,Ω⁻act)      
-    vol⁻act = get_cell_measure(Ω⁻act)
+# TO DO: speed up, this takes too much time; possibly try to get the physical of the cut domain and compare with exterior sbm interior (WSBM definition)
+function volume_fraction(cutgeo::EmbeddedDiscretization,Ω⁻act::Triangulation)
+    Ω⁻ = Interior(cutgeo, CUT_OUT)     # Physical domain
+    Ω⁻cut = Interior(cutgeo, CUT)
+    vol⁻ = get_cell_measure(Ω⁻,Ω⁻cut)      
+    vol⁻act = get_cell_measure(Ω⁻cut)
     γvol = vol⁻ ./ vol⁻act
-    w_α(f) = γvol*f
-    return w_α
+    bg_to_ioc = compute_bgcell_to_inoutcut(cutgeo,cutgeo.geo)
+    cell_to_mask = collect(Bool,bg_to_ioc .!= -1)
+    bg_to_ioc2 = bg_to_ioc[cell_to_mask]
+    inds = findall(x->x==0,bg_to_ioc2)
+    A = float(bg_to_ioc2)
+    A[inds] = γvol
+    # println(A)
+    # writevtk(Ω⁻act,"volume",cellfields=["vol"=>CellField(A, Ω⁻act)])
+    CellField(A, Ω⁻act)
 end # function
 
 function volume_fraction(cutgeo::STLEmbeddedDiscretization, Ω⁻act::Triangulation)

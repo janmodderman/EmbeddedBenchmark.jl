@@ -17,6 +17,7 @@ orders, (Lₓ, L₃, R), (g, k, ω, η₀), γg, (ls, to), folder = CaseSetup.pa
 # start loops
 l2s = []
 cns = []
+tos = []
 for order in orders
   degree = 2*order
   l2norms = Float64[]
@@ -72,12 +73,20 @@ for order in orders
 
     # Constructing weak form
     @timeit to "weak_form $order, $nₓ" begin
-    a, l = CaseSetup.weak_form(method)
+      arrₐ, l = CaseSetup.weak_form(method)
     end
+    aₒ = arrₐ[1]
+    aₑ = arrₐ[2]
 
     # Constructing the matrices
+    @timeit to "interior_matrix $order, $nₓ" Ai = assemble_matrix(aₒ(dΩ⁻),U,V)
+    @timeit to "ghost_penalty_matrix $order, $nₓ" Ae = assemble_matrix(aₑ(dE⁰,nE⁰,h,γg,Val(order)),U,V)
+    @timeit to "rhs $order, $nₓ" b = assemble_vector(l(dΩ⁻,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂),V)
     @timeit to "affine $order, $nₓ" begin
-      op = CaseSetup.build_operator(a(dΩ⁻,dE⁰,nE⁰,h,γg,order),l(dΩ⁻,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂),U,V)
+      A = Ai+Ae
+      b = get_vector(AffineFEOperator(aₒ(dΩ⁻),l(dΩ⁻,dΓ₁,nΓ₁,dΓ₂,nΓ₂,f₁,f₂),U,V))
+      # TO DO: not efficient like this, should find a way to attach constraints on vector b as defined in rhs
+      op = AffineFEOperator(U,V,A,b)
     end
 
     # Calculating L1 norm condition number 
@@ -101,6 +110,7 @@ for order in orders
   end # for
   push!(l2s, l2norms)
   push!(cns, cnlist)
+  push!(tos, to)
 end # for
 
 if plot_flag
@@ -115,7 +125,7 @@ end # if
 if time_flag
   show(to)
 end # if
-  return nₓ_vec, orders, l2s, cns, to
+  return nₓ_vec, orders, l2s, cns, tos
 end # function
 
 end # module
