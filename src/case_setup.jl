@@ -29,7 +29,7 @@ function parameters(method::String, case::String)
 
     # MMS parameters
     g = 9.81                    # [m/s²]: gravitational constant
-    k = 2π/L₃                   # [rad/m]: wave number
+    k = 2π/Lₓ                   # [rad/m]: wave number
     ω = sqrt(g*k*tanh(k*L₃))    # [rad/s]: dispersion relation ocean waves
     η₀ = 0.05                    # [m]: wave amplitude
 
@@ -72,7 +72,8 @@ function weak_form(method::String; stl_flag=false, GP_flag=true)
 
     # =============================BILINEAR FORM=============================
     # Interior 
-    aₒ(dΩ::Measure) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ                                                                   # Laplacian for all cases except WSBM
+    aₒ(dΩ::Measure) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩ
+                                                                       # Laplacian for all cases except WSBM
     aₒ(dΩᵢ::Measure,dΩₒ::Measure,α::CellField) = (ϕ,v) -> ∫(∇(ϕ)⋅∇(v))dΩᵢ + ∫((w_α∘(α,∇(ϕ),∇(v))))dΩₒ           # Laplacian for WSBM
     # TO DO: make this work for w_\alpha with dOmegawsbm, instead of split and make sure interior_matrix does not become too large. 
 
@@ -278,16 +279,16 @@ function _build_domain_wsbm(cutgeo::EmbeddedDiscretization)
 end # function
 
 # ANALYTICAL DISTANCE FUNCTIONS FOR SBM & WSBM
-function analytical_distance(model::DiscreteModel,Lₓ::Float64,L₃::Float64,R::Float64,fun::Function)
+function analytical_distance(model::DiscreteModel,Lₓ::Float64,L₃::Float64,R::Float64,fun::Function;x₀=L₃/2)
     ncd = num_cell_dims(model)
     if ncd < 3  # 2D: horizontal cylinder
         pmin = Point(-Lₓ/2, -L₃)
         pmax = Point(Lₓ/2, 0.0)
-        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, L₃/2) 
+        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, x₀) 
     else        # 3D: sphere
         pmin = Point(-Lₓ/2, -Lₓ/2, -L₃)
         pmax = Point(Lₓ/2, Lₓ/2, 0.0)
-        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, 0.0, L₃/2) 
+        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, 0.0, x₀) 
     end # if
     D(x,t) = pmid - x
     absD(x,t) = sqrt(D(x,t)⋅D(x,t))
@@ -313,17 +314,17 @@ function stl_distance(model::DiscreteModel, geo::STLGeometry, Γ₁::BoundaryTri
 end # function
 
 # CUTTING FUNCTIONS FOR ANALYTICAL AND STL
-function geometry_cut(model::DiscreteModel;Lₓ=0.5, L₃=0.5, R=0.25)
+function geometry_cut(model::DiscreteModel;Lₓ=0.5, L₃=0.5, R=0.25,x₀=L₃/2)
     ncd = num_cell_dims(model)
     if ncd < 3
         pmin = Point(-Lₓ/2, -L₃)
         pmax = Point(Lₓ/2, 0.0)
-        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, L₃/2) 
+        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, x₀) 
         geo = disk(R, x0=pmid)
     else            
         pmin = Point(-Lₓ/2, -Lₓ/2, -L₃)
         pmax = Point(Lₓ/2, Lₓ/2, 0.0)
-        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, 0.0, L₃/2) 
+        pmid = 0.5*(pmax + pmin) + VectorValue(0.0, 0.0, x₀) 
         geo = sphere(R, x0=pmid)
     end # if
     return cut(model, geo), cut_facets(model, geo)

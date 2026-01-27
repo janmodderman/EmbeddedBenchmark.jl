@@ -10,7 +10,7 @@ using LinearAlgebra
 using STLCutters
 include("../src/case_setup.jl")
 
-function wsbm(case::String, nₓ_vec::Vector;plot_flag=false, time_flag=false, vtk_flag=false,γg=0.1)
+function wsbm(case::String, x0s::Vector;plot_flag=false, time_flag=false, vtk_flag=false,γg=0.1)
 method = "wsbm"
 orders, (Lₓ, L₃, R), (g, k, ω, η₀), _, (ls, to), folder = CaseSetup.parameters(method, case)
 
@@ -22,7 +22,8 @@ for order in orders
   degree = 2*order
   l2norms = Float64[]
   cnlist = Float64[]
-  for nₓ in nₓ_vec
+  for x₀ in x0s
+    nₓ = 50
     h = Lₓ/nₓ
     # Setting up the model domain and MMS
     if case == "cylinder"
@@ -38,7 +39,7 @@ for order in orders
     # Cutting the model domain
     if case == "cylinder" || case == "sphere"
       @timeit to "cutting $order, $nₓ" begin
-        cutgeo, cutgeo_facets = CaseSetup.geometry_cut(model;Lₓ=Lₓ, L₃=L₃, R=R)
+        cutgeo, cutgeo_facets = CaseSetup.geometry_cut(model;Lₓ=Lₓ, L₃=L₃, R=R,x₀=x₀)
       end
       geo = get_geometry(cutgeo)
     else
@@ -91,7 +92,7 @@ for order in orders
     # Constructing normal + distance + shifted functions
     if case == "cylinder" || case == "sphere"
       @timeit to "distances $order, $nₓ" begin
-        d, n, f₂sbm = CaseSetup.analytical_distance(model,Lₓ,L₃,R,f₂)
+        d, n, f₂sbm = CaseSetup.analytical_distance(model,Lₓ,L₃,R,f₂,x₀=x₀)
       end
     else
       @timeit to "distances $order, $nₓ" begin
@@ -148,18 +149,18 @@ end # for
 
 if plot_flag
   plt = plot(legend=:bottomleft)
-  CaseSetup.plot_L2(nₓ_vec, orders, l2s;marker=:heptagon, title=method*" "*case*" L2 norm error")
+  CaseSetup.plot_L2(x0s, orders, l2s;marker=:heptagon, title=method*" "*case*" L2 norm error")
   display(plt)
 
   plt2 = plot(legend=:bottomleft)
-  CaseSetup.plot_cond(nₓ_vec, orders, cns;marker=:heptagon, title=method*" "*case*" condition number")
+  CaseSetup.plot_cond(x0s, orders, cns;marker=:heptagon, title=method*" "*case*" condition number")
   display(plt2)
 end # if
 
 if time_flag
   show(to)
 end # if
-  return nₓ_vec, orders, l2s, cns, tos
+  return x0s, orders, l2s, cns, tos
 end # function
 
 end # module

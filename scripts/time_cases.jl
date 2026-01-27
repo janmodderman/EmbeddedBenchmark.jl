@@ -122,7 +122,7 @@ function execute_time(nruns::Int64,nx::Vector,cases::Vector;plot_flag=false,prin
     cn_sbm = []
     cn_wsbm = []
     # nx = [8,16,32,64,128,256,512]
-    # nx = [8]
+    # nx = [256]
     orders = [1,2]
 
     for run in 1:(nruns+1)
@@ -199,16 +199,16 @@ function execute_time(nruns::Int64,nx::Vector,cases::Vector;plot_flag=false,prin
                     CSV.write("data/exp_pro/$folder/to_$(i)_$(order)_$n.csv", mn)
                 end # for
 
-                if i == "agfem"
-                    mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_agfem[nruns][order], CN = cn_agfem[nruns][order])
-                elseif i == "cutfem"
-                    mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_cutfem[nruns][order], CN = cn_cutfem[nruns][order])
-                elseif i == "sbm"
-                    mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_sbm[nruns][order], CN = cn_sbm[nruns][order])
-                elseif i == "wsbm"
-                    mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_wsbm[nruns][order], CN = cn_wsbm[nruns][order])
-                end # if
-                CSV.write("data/exp_pro/$folder/conv_$(i)_$(order).csv", mn2)
+                # if i == "agfem"
+                #     mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_agfem[nruns][order], CN = cn_agfem[nruns][order])
+                # elseif i == "cutfem"
+                #     mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_cutfem[nruns][order], CN = cn_cutfem[nruns][order])
+                # elseif i == "sbm"
+                #     mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_sbm[nruns][order], CN = cn_sbm[nruns][order])
+                # elseif i == "wsbm"
+                #     mn2 = DataFrame(Nx = nx, MinT = minT_arr, L2 = l2_wsbm[nruns][order], CN = cn_wsbm[nruns][order])
+                # end # if
+                # CSV.write("data/exp_pro/$folder/conv_$(i)_$(order).csv", mn2)
             end # for
         end # for
     end # if
@@ -320,7 +320,7 @@ end # function
 function _plot_conv_time(cases,orders;folder="")
     for order in orders
         for case in cases
-            p = plot(legend=:bottomleft,xlabel="CPU time [s]",ylabel="ϵ [-]",title="L2 norm error for $case at order $order")
+            p = plot(legend=:bottomleft,xlabel="n [-]",ylabel="ϵ [-]",title="L2 norm error for $case at order $order")
             labels = ["CutFEM","AgFEM","SBM","WSBM"]
             markers = [:circle,:diamond,:xcross,:star6]
             for (ni,i) in enumerate(["cutfem","agfem","sbm","wsbm"])
@@ -335,9 +335,9 @@ end # function
 
 # make_bar_plot([512],[2])
 folder = "conv_time"
-execute_time(10,[8,16,32,64,128,256,512,1024],["cylinder"];print_flag=false,folder=folder)
-_plot_conv_time(["cylinder"],[1,2];folder=folder)
+# execute_time(20,[256],["cylinder"];print_flag=true,folder=folder)
+# _plot_conv_time(["cylinder"],[1,2];folder=folder)
 # make_bar_plot([512],[2];folder=folder)
-# make_bar_plot([512],[1];folder=folder)
+make_bar_plot([256],[2];folder=folder)
 
 end # module
