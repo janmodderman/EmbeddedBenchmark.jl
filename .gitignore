@@ -9,3 +9,7 @@ plots/
 *.pvtu
 *.jld2
 *.msh
+src/old_code/
+src/transient/
+scripts/old_code/
+test/old_code/
