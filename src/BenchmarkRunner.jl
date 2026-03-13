@@ -57,6 +57,7 @@ function _build_weak_form(method::WSBM, measures, domain, f₁, f₂;
     α = CellField(1.0, domain.Ω⁻)
     build_weak_form(method, measures, domain, n, d, α, h, γg, order, f₁, f₂, f₁)
 end
+
 # ===================================================
 # Method-specific: assemble extra matrices
 # ===================================================
@@ -79,6 +80,29 @@ function _assemble_extra!(t, a, wf, spaces, ::WSBM)
     a[:ghost_matrix]    = @allocated assemble_matrix(wf.a.ghost,    spaces.U, spaces.V)
     t[:boundary_matrix] = @elapsed  assemble_matrix(wf.a.boundary, spaces.U, spaces.V)
     a[:boundary_matrix] = @allocated assemble_matrix(wf.a.boundary, spaces.U, spaces.V)
+end
+
+# ===================================================
+# Method-specific: assemble for affine operator
+# ===================================================
+
+function _build_affine_operator(wf, spaces, ::AGFEM)
+    AffineFEOperator(wf.a.interior, wf.l, spaces.U, spaces.V)
+end
+
+function _build_affine_operator(wf, spaces, ::CUTFEM)
+    a(u, v) = wf.a.interior(u, v) + wf.a.ghost(u, v)
+    AffineFEOperator(a, wf.l, spaces.U, spaces.V)
+end
+
+function _build_affine_operator(wf, spaces, ::SBM)
+    a(u, v) = wf.a.interior(u, v) + wf.a.boundary(u, v)
+    AffineFEOperator(a, wf.l, spaces.U, spaces.V)
+end
+
+function _build_affine_operator(wf, spaces, ::WSBM)
+    a(u, v) = wf.a.interior(u, v) + wf.a.ghost(u, v) + wf.a.boundary(u, v)
+    AffineFEOperator(a, wf.l, spaces.U, spaces.V)
 end
 
 # ===================================================
@@ -168,10 +192,10 @@ function _single_run(method::EmbeddingMethod, params::SimulationParams{N},
 
     # 10. Affine operator
     t[:affine] = @elapsed begin
-        op = AffineFEOperator(wf.a.interior, wf.l, spaces.U, spaces.V)
+        op = _build_affine_operator(wf, spaces, method)
     end
     a[:affine] = @allocated begin
-        AffineFEOperator(wf.a.interior, wf.l, spaces.U, spaces.V)
+        _build_affine_operator(wf, spaces, method)
     end
 
     # 11. Solve

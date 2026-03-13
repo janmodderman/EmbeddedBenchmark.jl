@@ -45,7 +45,8 @@ export method_categories
 
 export TAG_COLORS, FALLBACK_COLOR
 export plot_bar, plot_bar!
-export save_benchmark, load_benchmark, plot_bar_from_file, append_benchmark
+export save_benchmark, load_benchmark, plot_bar_from_file
+export plot_L2_from_files, plot_cond_from_files
 
 
 include("Parameters.jl")
@@ -56,6 +57,6 @@ include("EmbeddedGeometry.jl")
 include("FESpaces.jl")
 include("WeakForms.jl")
 include("BenchmarkRunner.jl")
-include("Plotting.jl")
+include("PostProcessing.jl")
 
 end # module EmbeddedBenchmark

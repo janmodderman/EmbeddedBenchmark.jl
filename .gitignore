@@ -4,3 +4,8 @@ data/exp_raw/
 data/exp_pro/
 papers/
 plots/
+*.json
+*.vtu
+*.pvtu
+*.jld2
+*.msh
