@@ -5,7 +5,7 @@ geometry = :cylinder                # ← only change this if you want to benchm
 # paths = ["data/agfem_$(geometry).json", "data/cutfem_$(geometry).json"]
 
 paths = ["data/agfem_cylinder.json", "data/cutfem_cylinder.json",
-         "data/sbm_cylinder.json"]#,   "data/wsbm_cylinder.json"]
+         "data/sbm_cylinder.json",   "data/wsbm_cylinder.json"]
 
 l2_plots   = plot_L2_from_files(paths)
 

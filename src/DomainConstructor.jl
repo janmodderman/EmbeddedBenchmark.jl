@@ -94,7 +94,7 @@ Container for all triangulations and normal vectors of a domain.
 - `nΓ₂`:    Normal of Γ₂
 - `E⁰`:     Ghost skeleton (CUTFEM/WSBM only, else Nothing)
 - `nE⁰`:    Normal of ghost skeleton (else Nothing)
-- `Ωsbm`:   SBM interior domains (WSBM only, else Nothing)
+- `Ωsbm`:   WSBM interior and cut domains (WSBM only, else Nothing)
 """
 struct Domain{T1,T2,T3,T4,T5,T6,T7,T8,T9}
     Ω⁻::T1
@@ -160,7 +160,7 @@ function build_domain(method::WSBM, cutgeo, cutgeo_facets, config::DomainConfig=
     E⁰    = GhostSkeleton(cutgeo, f.ghost_flag)
     nE⁰   = get_normal_vector(E⁰)
     Ωwsbm  = (Interior(cutgeo, f.sbm_inner), Interior(cutgeo, f.sbm_cut))
-    Domain(Ω⁻act, nothing, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, Ωwsbm)
+    Domain(Ω⁻act, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, Ωwsbm)
 end
 
 # STL wrapper — delegates to embedded discretization versions
@@ -203,7 +203,7 @@ Construct all quadrature measures from a Domain.
 Measures are only built for fields that are not Nothing.
 """
 function build_measures(domain::Domain, degree::Int)
-    dΩ⁻ = Measure(domain.Ω⁻,  degree)
+    dΩ⁻ = domain.Ωwsbm  !== nothing ? _get_wsbm_measures(domain , degree) : Measure(domain.Ω⁻,  degree)
     dΓ₁ = Measure(domain.Γ₁,  degree)
     dΓ₂ = domain.Γ₂  !== nothing ? Measure(domain.Γ₂,  degree) : nothing
     dE⁰ = domain.E⁰  !== nothing ? Measure(domain.E⁰,  degree) : nothing

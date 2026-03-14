@@ -63,7 +63,7 @@ function _get_volume_fraction(::AGFEM,  cutgeo, domain) return nothing end
 function _get_volume_fraction(::CUTFEM, cutgeo, domain) return nothing end
 function _get_volume_fraction(::SBM,    cutgeo, domain) return nothing end
 function _get_volume_fraction(::WSBM,   cutgeo, domain)
-    volume_fraction(cutgeo, domain.Ωwsbm)
+    volume_fraction(cutgeo, domain.Ω⁻act)
 end
 
 # ===================================================

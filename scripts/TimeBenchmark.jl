@@ -4,7 +4,7 @@ using Gridap
 # ===================================================
 # Configuration
 # ===================================================
-method   = SBM()                  # ← only change this: AGFEM(), CUTFEM(), SBM(), WSBM()
+method   = WSBM()                  # ← only change this: AGFEM(), CUTFEM(), SBM(), WSBM()
 orders   = [1,2]                   # ← only change this if you want to benchmark different polynomial orders (SBM and WSBM only allows up to 2nd order currently)
 ns       = [16, 32, 64, 128]        # ← only change this if you want to benchmark different mesh sizes (number of cells in each direction is equal to n)
 n_runs   = 10                       # ← only change this if you want to adjust the number of benchmark runs (more runs = more reliable results but longer runtime)
