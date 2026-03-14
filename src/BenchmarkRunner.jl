@@ -34,12 +34,12 @@ end
 # Method-specific: build weak form
 # ===================================================
 function _build_weak_form(method::AGFEM, measures, domain, f₁, f₂;
-                            h, γg, order, degree, n=nothing, d=nothing, fsbm=nothing, α=nothing)
+                            h, γg, order, degree, n=nothing, d=nothing, fsbm=nothing, α=nothing, dist=nothing)
     build_weak_form(method, measures, domain, f₁, f₂)
 end
 
 function _build_weak_form(method::CUTFEM, measures, domain, f₁, f₂;
-                            h, γg, order, degree, n=nothing, d=nothing, fsbm=nothing, α=nothing)
+                            h, γg, order, degree, n=nothing, d=nothing, fsbm=nothing, α=nothing, dist=nothing)
     build_weak_form(method, measures, domain, h, γg, order, f₁, f₂)
 end
 
@@ -109,7 +109,7 @@ function _build_affine_operator(wf, spaces, ::SBM)
 end
 
 function _build_affine_operator(wf, spaces, ::WSBM)
-    a(u, v) = wf.a.interior(u, v) + wf.a.ghost(u, v) + wf.a.boundary(u, v)
+    a(u, v) = wf.a.interior(u, v) + wf.a.ghost(u, v) + wf.a.boundary(u, v) + wf.a.shift_edge(u,v)
     AffineFEOperator(a, wf.l, spaces.U, spaces.V)
 end
 

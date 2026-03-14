@@ -16,27 +16,11 @@ abstract type ManufacturedSolution{N} end
 
 function _check_dim(N)
     N isa Int && N in (2, 3) || throw(ArgumentError("Dimension N must be 2 or 3, got $N"))
-end
+end # function
 
 # const PointLike{N,T} = Union{AbstractVector{T}, VectorValue{N,T}}
 
-# TO DO: Implement a general function to compute f₁ and f₂ from any ManufacturedSolution using ForwardDiff
-# function manufactured_functions(s::ManufacturedSolution{N}) where {N}
-#     u_fd(x::SVector{N,<:Real},t) = s(x,t)
-
-#     u(x,t)  = u_fd(SVector(Tuple(x)), t)
-
-#     ∇u(x,t) = VectorValue(Tuple(ForwardDiff.gradient(u_fd, SVector(Tuple(x)))))
-
-#     function ∇u_fd(y::SVector{N,<:Real})
-#         ForwardDiff.gradient(u_fd, y)
-#     end
-
-#     Δu(x) = -tr(ForwardDiff.jacobian(∇u_fd, SVector(Tuple(x))))
-
-#     return u, ∇u, Δu
-# end
-
+# TO DO: Implement a general function to compute f₁ and f₂ from any ManufacturedSolution possibly using ForwardDiff?
 
 """
     struct AirySolution <: ManufacturedSolution end
@@ -53,8 +37,8 @@ struct AirySolution{N} <: ManufacturedSolution{N}
         _check_dim(N)
         ω = sqrt(g * k * tanh(k * d))   # Dispersion relation for linear gravity waves
         new{N}(g, k, η₀, d, ω)
-    end
-end
+    end # function
+end # struct
 
 function manufactured_functions(s::AirySolution{2})
     # Analytical solution
@@ -73,7 +57,7 @@ function manufactured_functions(s::AirySolution{2})
     Δu(x::VectorValue{2},t::Real) = 0.0
 
     return u, ∇u, Δu
-end
+end # function
 
 function manufactured_functions(s::AirySolution{3})
     # Analytical solution
@@ -96,7 +80,7 @@ function manufactured_functions(s::AirySolution{3})
     Δu(x::VectorValue{3},t::Real) = -s.k^2 * u(x,t)
 
     return u, ∇u, Δu
-end
+end # function
 
 # Convenience constructors for 2D and 3D Airy solutions
 AirySolution2D(g, k, η₀, d) = AirySolution{2}(g, k, η₀, d)

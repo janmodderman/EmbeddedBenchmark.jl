@@ -14,29 +14,29 @@ function save_benchmark(path::String, method::EmbeddingMethod,
         "min_times"  => Dict(
             string(order) => Dict(
                 string(nₓ) => Dict(string(cat) => min_times[order][nₓ][cat]
-                                   for cat in method_categories(method))
+                                    for cat in method_categories(method))
                 for nₓ in nₓ_vec)
             for order in orders),
         "min_allocs" => Dict(
             string(order) => Dict(
                 string(nₓ) => Dict(string(cat) => min_allocs[order][nₓ][cat]
-                                   for cat in method_categories(method))
+                                    for cat in method_categories(method))
                 for nₓ in nₓ_vec)
             for order in orders),
         "l2s"        => Dict(
             string(order) => Dict(string(nₓ) => l2s[order][nₓ]
-                                  for nₓ in nₓ_vec)
+                                    for nₓ in nₓ_vec)
             for order in orders),
         "cns"        => Dict(
             string(order) => Dict(string(nₓ) => cns[order][nₓ]
-                                  for nₓ in nₓ_vec)
+                                    for nₓ in nₓ_vec)
             for order in orders)
     )
     open(path, "w") do io
         JSON3.write(io, data)
     end
     println("Saved benchmark results to $path")
-end
+end # function
 
 function load_benchmark(path::String)
     data = JSON3.read(read(path, String))
@@ -75,7 +75,7 @@ function load_benchmark(path::String)
         for order in orders)
 
     return method, min_times, min_allocs, l2s, cns, nₓ_vec, orders, cats
-end
+end # function
 
 # Tol color palette (color blindness friendly)
 const TOL_COLORS = [
@@ -137,15 +137,15 @@ function _sort_cats(cats::Vector{Symbol})
     ordered   = filter(cat -> cat ∈ cats, CAT_ORDER)          # known cats in fixed order
     unordered = filter(cat -> cat ∉ CAT_ORDER, cats)          # unknown cats appended at end
     return vcat(ordered, unordered)
-end
+end # function
 
 function _cat_colors(cats::Vector{Symbol})
     reshape([get(TAG_COLORS, cat, FALLBACK_COLOR) for cat in cats], 1, :)
 end
 
 function merge_categories(min_times::Dict, min_allocs::Dict,
-                           nₓ_vec::Vector{Int}, orders::Vector{Int},
-                           merge_cats::Vector{Symbol}, new_cat::Symbol)
+                            nₓ_vec::Vector{Int}, orders::Vector{Int},
+                            merge_cats::Vector{Symbol}, new_cat::Symbol)
 
     # Build new category list — replace all merged cats with single new_cat
     # preserving order of first occurrence
@@ -179,10 +179,10 @@ function merge_categories(min_times::Dict, min_allocs::Dict,
         for order in orders)
 
     return new_times, new_allocs, new_cats
-end
+end # function
 
 function plot_bar_from_file(path::String; normalized=false, quantity=:time,
-                             merge_setup=true, skip_cats=[:affine], kwargs...)
+                                merge_setup=true, skip_cats=[:affine], kwargs...)
     method_str, min_times, min_allocs, l2s, cns, nₓ_vec, orders, cats = load_benchmark(path)
 
     if merge_setup
@@ -227,10 +227,10 @@ function plot_bar_from_file(path::String; normalized=false, quantity=:time,
     end
 
     return plots
-end
+end # function
 
 function plot_bar!(method::EmbeddingMethod, order::Int, nₓ_vec::Vector{Int},
-                   min_times::Dict; normalized=false, kwargs...)
+                    min_times::Dict; normalized=false, kwargs...)
     cat_labels, nₓ_labels, data, data_norm = plot_bar(method, order, nₓ_vec, min_times)
 
     plotdata = normalized ? data_norm : data
@@ -246,7 +246,7 @@ function plot_bar!(method::EmbeddingMethod, order::Int, nₓ_vec::Vector{Int},
         bar_width  = 0.7,
         kwargs...
     )
-end
+end  # function
 
 """
     plot_bar(method, order, nₓ_vec, min_times) -> Figure
@@ -254,7 +254,7 @@ end
 Plot a grouped bar chart of minimum times per category across mesh sizes.
 """
 function plot_bar(method::EmbeddingMethod, order::Int, nₓ_vec::Vector{Int},
-                  min_times::Dict)
+                    min_times::Dict)
     cats  = method_categories(method)
     nlabels = length(cats)
     ngroups  = length(nₓ_vec)
@@ -269,32 +269,32 @@ function plot_bar(method::EmbeddingMethod, order::Int, nₓ_vec::Vector{Int},
     nₓ_labels  = ["nₓ=$nₓ" for nₓ in nₓ_vec]
 
     return cat_labels, nₓ_labels, data, data_norm
-end
+end # function
 
 function _helper_plot(method::EmbeddingMethod, order::Int, nₓ::Int,
-                      min_times::Dict)
+                        min_times::Dict)
     cats   = method_categories(method)
     tvals  = [min_times[order][nₓ][cat] for cat in cats]
     ttotal = sum(tvals)
     tnorm  = tvals ./ ttotal
     return tnorm, tvals, cats
-end
+end # function
 
 function _plot_agfem(order::Int, nₓ::Int, min_times::Dict)
     return _helper_plot(AGFEM(), order, nₓ, min_times)
-end
+end # function
 
 function _plot_cutfem(order::Int, nₓ::Int, min_times::Dict)
     return _helper_plot(CUTFEM(), order, nₓ, min_times)
-end
+end # function
 
 function _plot_sbm(order::Int, nₓ::Int, min_times::Dict)
     return _helper_plot(SBM(), order, nₓ, min_times)
-end
+end # function
 
 function _plot_wsbm(order::Int, nₓ::Int, min_times::Dict)
     return _helper_plot(WSBM(), order, nₓ, min_times)
-end
+end # function
 
 function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothing, kwargs...)
 
@@ -303,7 +303,7 @@ function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothin
 
     # Determine orders to plot — union of all orders across files, or user-specified
     all_orders = orders !== nothing ? orders :
-                 sort(unique(vcat([d[7] for d in datasets]...)))
+                    sort(unique(vcat([d[7] for d in datasets]...)))
 
     # Reference slopes scaled to first dataset first order
     _, _, _, l2s_ref, _, nₓ_ref, ord_ref, _ = datasets[1]
@@ -313,8 +313,8 @@ function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothin
     plots = []
     for order in all_orders
         p = plot(; xlabel="nₓ", ylabel="L2 norm", xaxis=:log, yaxis=:log,
-                   title="L2 convergence: order=$order",
-                   legend=:outertopright, kwargs...)
+                    title="L2 convergence: order=$order",
+                    legend=:outertopright, kwargs...)
 
         for (i, (path, dataset)) in enumerate(zip(paths, datasets))
             method_str, _, _, l2s, _, nₓ_vec, file_orders, _ = dataset
@@ -323,9 +323,9 @@ function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothin
             sort!(nₓ_vec)
             l2_vals = [l2s[order][nₓ] for nₓ in nₓ_vec]
             plot!(p, nₓ_vec, l2_vals;
-                  marker = marker,
-                  label  = method_str,
-                  color  = TOL_COLORS[mod1(i, length(TOL_COLORS))])
+                    marker = marker,
+                    label  = method_str,
+                    color  = TOL_COLORS[mod1(i, length(TOL_COLORS))])
         end
 
         # Reference slopes
@@ -337,13 +337,13 @@ function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothin
     end
 
     return plots
-end
+end # function
 
 function plot_cond_from_files(paths::Vector{String}; marker=:circle, orders=nothing, kwargs...)
 
     datasets   = [load_benchmark(path) for path in paths]
     all_orders = orders !== nothing ? orders :
-                 sort(unique(vcat([d[7] for d in datasets]...)))
+                    sort(unique(vcat([d[7] for d in datasets]...)))
 
     # Reference slopes
     _, _, _, _, cns_ref, nₓ_ref, ord_ref, _ = datasets[1]
@@ -353,8 +353,8 @@ function plot_cond_from_files(paths::Vector{String}; marker=:circle, orders=noth
     plots = []
     for order in all_orders
         p = plot(; xlabel="nₓ", ylabel="Condition number (L1)", xaxis=:log, yaxis=:log,
-                   title="Condition number: order=$order",
-                   legend=:outertopright, kwargs...)
+                    title="Condition number: order=$order",
+                    legend=:outertopright, kwargs...)
 
         for (i, (path, dataset)) in enumerate(zip(paths, datasets))
             method_str, _, _, _, cns, nₓ_vec, file_orders, _ = dataset
@@ -363,9 +363,9 @@ function plot_cond_from_files(paths::Vector{String}; marker=:circle, orders=noth
             sort!(nₓ_vec)
             cn_vals = [cns[order][nₓ] for nₓ in nₓ_vec]
             plot!(p, nₓ_vec, cn_vals;
-                  marker = marker,
-                  label  = method_str,
-                  color  = TOL_COLORS[mod1(i, length(TOL_COLORS))])
+                    marker = marker,
+                    label  = method_str,
+                    color  = TOL_COLORS[mod1(i, length(TOL_COLORS))])
         end
 
         # Reference slopes for condition number growth
@@ -376,4 +376,4 @@ function plot_cond_from_files(paths::Vector{String}; marker=:circle, orders=noth
     end
 
     return plots
-end
+end # function

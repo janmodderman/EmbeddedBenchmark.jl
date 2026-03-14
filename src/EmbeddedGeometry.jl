@@ -24,9 +24,7 @@ Circular/cylindrical embedded geometry in 2D.
 struct CylinderGeometry <: EmbeddedGeometry{2}
     R::Float64                      # radius
     x₀::VectorValue{2,Float64}      # vertical offset from domain midpoint
-    # Lₓ::Float64                     # horizontal domain length
-    # L₃::Float64                     # vertical domain length
-end
+end # struct
 
 """
     struct SphereGeometry <: EmbeddedGeometry{3}
@@ -36,20 +34,18 @@ Spherical embedded geometry in 3D.
 struct SphereGeometry <: EmbeddedGeometry{3}
     R::Float64                      # radius
     x₀::VectorValue{3,Float64}      # domain midpoint
-    # Lₓ::Float64                     # horizontal domain length
-    # L₃::Float64                     # vertical domain length
-end
+end # struct
 
 # ===================================================
 # Geometry builders — return GridapEmbedded geo objects
 # ===================================================
 function build_geometry(g::CylinderGeometry)
     return disk(g.R, x0=g.x₀)
-end
+end # function
 
 function build_geometry(g::SphereGeometry)
     return sphere(g.R, x0=g.x₀)
-end
+end # function
 
 # ===================================================
 # Cutting functions
@@ -64,7 +60,7 @@ Returns `(cutgeo, cutgeo_facets)`.
 function geometry_cut(model::DiscreteModel, g::EmbeddedGeometry)
     geo = build_geometry(g)
     return cut(model, geo), cut_facets(model, geo)
-end
+end # function
 
 """
     geometry_cut(model::DiscreteModel, g::STLGeometry)
@@ -75,12 +71,11 @@ Returns `(cutgeo, cutgeo_facets)`.
 function geometry_cut(model::DiscreteModel, g::STLGeometry)
     cutgeo = cut(model, g)
     return cutgeo, cutgeo.cutfacets
-end
+end # function
 
 # ===================================================
 # Distances — levelset function
 # ===================================================
-# TO DO: assert δ correctness in general scenarios
 function distances(bgmodel::DiscreteModel,
                     Γ::Union{BoundaryTriangulation, SkeletonTriangulation},
                     geo::EmbeddedGeometry{N}, degree::Int) where {N}
@@ -96,18 +91,22 @@ function distances(bgmodel::DiscreteModel,
 
     for (icell, cell) in enumerate(qcp.cell_phys_point)
         for (ipoint, point) in enumerate(cell)
-            δ    = pmid - point                     # is order important here when we change INSIDE or OUTSIDE?
+            δ    = pmid - point          # vector from point to center
             absδ = sqrt(δ ⋅ δ)
-            dist = absδ - geo.R
-            n    = dist >= 0.0 ? δ / absδ : -δ / absδ
-            d_vec_cs.values[icell][ipoint] = dist * n
+            δ̂    = δ / absδ
+            Xd   = pmid - geo.R * δ̂     # point on boundary closest to x
+            d    = Xd - point
+            absd = sqrt(d ⋅ d)
+            n    = absd > 0 ? d / absd : δ̂
+
+            d_vec_cs.values[icell][ipoint] = d
             n_vec_cs.values[icell][ipoint] = n
-            Xd_cs.values[icell][ipoint] = point + d_vec_cs.values[icell][ipoint]
+            Xd_cs.values[icell][ipoint]    = Xd
         end
     end
 
     return d_vec_cs, n_vec_cs, Xd_cs
-end
+end # function
 
 # ===================================================
 # Distances — STL
@@ -145,7 +144,7 @@ function distances(bgmodel::DiscreteModel,
     end
 
     return d_vec_cs, n_vec_cs, Xd_cs
-end
+end # function
 
 # Function to shift analytical solutions, required for MMS with SBM & WSBM
 # TO DO: currently only tested for returning VectorValue, verify scalars or higher order tensors work as well
@@ -175,7 +174,7 @@ struct DistanceData
     n::CellState    # normal vector
     Xd::CellState   # shifted point
     fsbm::CellState # shifted analytical function
-end
+end # struct
 
 # ===================================================
 # Wrappers for each unfitted method: SBM or WSBM
@@ -186,7 +185,7 @@ function compute_distances(::SBM, bgmodel::DiscreteModel,
     d, n, Xd = distances(bgmodel, Γ₁, geo, degree)
     fsbm     = fshifted(Xd, fun, Γ₁, degree)
     return DistanceData(d, n, Xd, fsbm)
-end
+end # function
 
 function compute_distances(::SBM, bgmodel::DiscreteModel,
                             geo::STLGeometry, Γ₁::BoundaryTriangulation,
@@ -194,7 +193,7 @@ function compute_distances(::SBM, bgmodel::DiscreteModel,
     d, n, Xd = distances(bgmodel, Γ₁, geo, degree)
     fsbm     = fshifted(Xd, fun, Γ₁, degree)
     return DistanceData(d, n, Xd, fsbm)
-end
+end # function
 
 function compute_distances(::WSBM, bgmodel::DiscreteModel,
                             geo::EmbeddedGeometry, Γ₁::BoundaryTriangulation,
@@ -208,7 +207,7 @@ function compute_distances(::WSBM, bgmodel::DiscreteModel,
         boundary = DistanceData(d₁, n₁, Xd₁, fsbm₁),
         edges    = DistanceData(dₑ, nₑ, Xdₑ, fsbmₑ)
     )
-end
+end # function
 
 function compute_distances(::WSBM, bgmodel::DiscreteModel,
                             geo::STLGeometry, Γ₁::BoundaryTriangulation,
@@ -222,4 +221,4 @@ function compute_distances(::WSBM, bgmodel::DiscreteModel,
         boundary = DistanceData(d₁, n₁, Xd₁, fsbm₁),
         edges    = DistanceData(dₑ, nₑ, Xdₑ, fsbmₑ)
     )
-end
+end # function

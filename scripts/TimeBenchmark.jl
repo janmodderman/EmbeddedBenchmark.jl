@@ -4,9 +4,9 @@ using Gridap
 # ===================================================
 # Configuration
 # ===================================================
-method   = WSBM()                  # ← only change this: AGFEM(), CUTFEM(), SBM(), WSBM()
+method   = CUTFEM()                  # ← only change this: AGFEM(), CUTFEM(), SBM(), WSBM()
 orders   = [1,2]                   # ← only change this if you want to benchmark different polynomial orders (SBM and WSBM only allows up to 2nd order currently)
-ns       = [16, 32, 64, 128]        # ← only change this if you want to benchmark different mesh sizes (number of cells in each direction is equal to n)
+ns       = [16, 32, 64, 128, 256, 512]        # ← only change this if you want to benchmark different mesh sizes (number of cells in each direction is equal to n)
 n_runs   = 10                       # ← only change this if you want to adjust the number of benchmark runs (more runs = more reliable results but longer runtime)
 n_warmup = 3                        # ← only change this if you want to adjust the number of warmup runs (to mitigate compilation time effects)
 geometry = :cylinder                # ← only change this if you want to benchmark a different geometry (currently only :cylinder is implemented, but you could add more in EmbeddedGeometry.jl and adjust the parameters accordingly in the SimulationParams constructor below)

@@ -40,7 +40,7 @@ Container for test and trial finite element spaces.
 struct FESpaces{TV, TU}
     V::TV
     U::TU
-end
+end # struct
 
 # ===================================================
 # Build Spaces — generic fallback (CUTFEM, SBM, WSBM)
@@ -56,20 +56,20 @@ function build_spaces(::EmbeddingMethod, domain::Domain, config::FESpaceConfig, 
     V     = TestFESpace(domain.Ω⁻act, reffe; dirichlet_tags=config.dirichlet_tags)
     U     = TrialFESpace(V, x -> u(x, config.t))
     return FESpaces(V, U)
-end
+end # function
 
 # ===================================================
 # Build Spaces — AGFEM (requires aggregation)
 # ===================================================
 """
     build_spaces(::AGFEM, domain::Domain, config::FESpaceConfig, u::ManufacturedSolution,
-                 cutgeo, g::EmbeddedGeometry, domain_config::DomainConfig)
+                    cutgeo, g::EmbeddedGeometry, domain_config::DomainConfig)
 
 Construct aggregated FE spaces for AGFEM.
 Aggregation flag is derived from DomainConfig — consistent with _get_flags.
 """
 function build_spaces(::AGFEM, domain::Domain, config::FESpaceConfig, u::ManufacturedSolution,
-                      cutgeo, g::EmbeddedGeometry, domain_config::DomainConfig)
+                        cutgeo, g::EmbeddedGeometry, domain_config::DomainConfig)
     f          = _get_flags(domain_config)
     geo        = build_geometry(g)
     reffe      = ReferenceFE(lagrangian, Float64, config.order)
@@ -78,4 +78,4 @@ function build_spaces(::AGFEM, domain::Domain, config::FESpaceConfig, u::Manufac
     V          = AgFEMSpace(Vstd, aggregates)
     U          = TrialFESpace(V, x -> u(x, config.t))
     return FESpaces(V, U)
-end
+end # function

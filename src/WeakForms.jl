@@ -3,8 +3,6 @@ using GridapEmbedded
 
 using Gridap.Geometry
 
-export WeakForm, build_weak_form
-
 # ===================================================
 # WeakForm Struct
 # ===================================================
@@ -24,18 +22,31 @@ Container for bilinear and linear form functions for a given method.
 struct WeakForm{Ta, Tl}
     a::Ta   # NamedTuple of bilinear forms
     l::Tl   # linear form
-end
+end # struct
 
 # ===================================================
 # Operator Definitions
 # ===================================================
 
-# Shifting operator
-# _s(∇ϕ, ∇∇ϕ, d, n) = ((∇∇ϕ⋅d + ∇ϕ)⋅n)*n - ∇ϕ
-
 # Weighted test function
 _w_α(α, w)    = α*w
 _w_α(α, w, v) = α*(w⋅v)
+
+# Custom jump operator definitions: 
+# jump with normal product
+function jump_n(v,n_sur::SkeletonPair{<:CellField},n_true::CellState)
+    n_sur.⁺ ⋅ ((n_true ⊗ n_true) ⋅ v.⁺) + n_sur.⁻ ⋅ ((n_true ⊗ n_true) ⋅ v.⁻)
+end # function
+
+# jump with normal product and distance
+function jump_d(v,d::CellState,n_sur::SkeletonPair{<:CellField},n_true::CellState)
+    n_sur.⁺ ⋅ ((n_true ⊗ n_true) ⋅ (v.⁺ ⋅ d)) + n_sur.⁻ ⋅ ((n_true ⊗ n_true) ⋅ (v.⁻ ⋅ d))
+end # function
+
+# jump with normal product for rhs with shifted function
+function jump_rhs(n_sur::SkeletonPair{<:CellField},n_true::CellState,f::CellState)
+    n_sur.⁺ ⋅ ((n_true ⊗ n_true) ⋅ f) + n_sur.⁻ ⋅ ((n_true ⊗ n_true) ⋅ f)
+end # function
 
 # ===================================================
 # Bilinear Forms
@@ -44,45 +55,45 @@ _w_α(α, w, v) = α*(w⋅v)
 # --- Interior ---
 function _a_interior(dΩ::Measure)
     (ϕ, v) -> ∫(∇(ϕ)⋅∇(v))dΩ
-end
+end # function
 
 function _a_interior(dΩᵢ::Measure, dΩₒ::Measure, α::CellField)
     (ϕ, v) -> ∫(∇(ϕ)⋅∇(v))dΩᵢ + ∫((_w_α∘(α, ∇(ϕ), ∇(v))))dΩₒ
-end
+end # function
 
 # --- Ghost penalty ---
 function _a_ghost(dE⁰::Measure, nE⁰::SkeletonPair, h::Float64, γg::Float64, ::Val{1})
     (ϕ, v) -> ∫((γg*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)))dE⁰
-end
+end # function
 
 function _a_ghost(dE⁰::Measure, nE⁰::SkeletonPair, h::Float64, γg::Float64, ::Val{2})
     (ϕ, v) -> ∫((γg*(h^3))*jump(nE⁰⋅∇(v))⊙jump(nE⁰⋅∇(ϕ)) +
                 (γg*(h^5))*jump(nE⁰⋅∇∇(v))⊙jump(nE⁰⋅∇∇(ϕ)))dE⁰
-end
+end # function
 
 # --- Shift on edges ---
 function _a_shift_edge(dE⁰::Measure, nE⁰::SkeletonPair,
                         dist_edg::DistanceData, α::CellField)
     d = dist_edg.d
     n = dist_edg.n
-    (ϕ, v) -> ∫(jump(nE⁰ * (_w_α ∘ (α, v))) ⋅
-                ((((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ))) ⋅ n) * n - mean(∇(ϕ))))dE⁰ +
+    (ϕ, v) -> ∫(jump(nE⁰ * (_w_α ∘ (α, v))) ⋅ 
+                    ((((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ))) ⋅ n) * n - mean(∇(ϕ))))dE⁰ +
                 ∫(mean((_w_α ∘ (α, v))) ⋅ 
-                ((((jump(∇∇(ϕ)) ⋅ d) + jump(∇(ϕ))) ⋅ n) * n - jump(∇(ϕ))))dE⁰
-end
+                    (jump_d(∇∇(ϕ),d,nE⁰,n) + jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
+end # function
 
 # --- Shift on boundary ---
 function _a_shift_boundary(dΓ₁::Measure, nΓ₁::CellField, dist::DistanceData)
     d = dist.d
     n = dist.n
     (ϕ, v) -> ∫((nΓ₁ ⋅ ( ( ((∇∇(ϕ) ⋅ d) + ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * v)dΓ₁
-end
+end # function
 
 function _a_shift_boundary(dΓ₁::Measure, nΓ₁::CellField, dist::DistanceData, α::CellField)
     d = dist.d
     n = dist.n
     (ϕ, v) -> ∫((nΓ₁ ⋅ ((((∇∇(ϕ) ⋅ d) + ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * (_w_α ∘ (α, v)))dΓ₁
-end
+end # function
 
 # ===================================================
 # Linear Forms (RHS)
@@ -92,7 +103,7 @@ end
 function _l_standard(dΩ::Measure, dΓ₁::Measure, nΓ₁::CellField,
                         dΓ₂::Measure, nΓ₂::CellField, f₁::Function, f₂::Function)
     v -> ∫(f₁ * v)dΩ + ∫((nΓ₁ ⋅ f₂) * v)dΓ₁ + ∫((nΓ₂ ⋅ f₂) * v)dΓ₂
-end
+end # function
 
 # SBM - shifting on boundary
 function _l_sbm(dΩ::Measure, dΓ₁::Measure, nΓ₁::CellField,
@@ -101,7 +112,7 @@ function _l_sbm(dΩ::Measure, dΓ₁::Measure, nΓ₁::CellField,
     v -> ∫(f₁ * v)dΩ +
          ∫((nΓ₁ * v) ⋅ dist.n * (dist.fsbm ⋅ dist.n))dΓ₁ +
          ∫((nΓ₂ ⋅ f₂) * v)dΓ₂
-end
+end # function
 
 # WSBM - shifting on boundary and edges
 # TO DO: verify correct righthandside! + investigate possible optimizations
@@ -113,9 +124,9 @@ function _l_wsbm(dΩᵢ::Measure, dΩₒ::Measure, dΓ₁::Measure, nΓ₁::Cell
     v -> ∫(f₁ * (_w_α ∘ (α, v)))dΩₒ + ∫(f₁ * v)dΩᵢ +
          ∫((nΓ₁ * (_w_α ∘ (α, v))) ⋅ dist.boundary.n * (dist.boundary.fsbm ⋅ dist.boundary.n))dΓ₁ +
          ∫(jump(nE⁰ * (_w_α ∘ (α, v))) ⋅ dist.edges.n * (dist.edges.fsbm ⋅ dist.edges.n))dE⁰ +
-         ∫( mean((_w_α ∘ (α, v))) * jump(nE⁰) ⋅ dist.edges.n * (dist.edges.fsbm ⋅ dist.edges.n))dE⁰ + 
+         ∫( mean((_w_α ∘ (α, v))) * jump_rhs(nE⁰,dist.edges.n,dist.edges.fsbm))dE⁰ + 
          ∫((nΓ₂ ⋅ f₂) * (_w_α ∘ (α, v)))dΓ₂
-end
+end # function
 
 # ===================================================
 # Public Interface — build_weak_form dispatches on method
@@ -132,7 +143,7 @@ function build_weak_form(::AGFEM, measures::Measures, domain::Domain,
     l = _l_standard(measures.dΩ⁻, measures.dΓ₁, domain.nΓ₁,
                     measures.dΓ₂, domain.nΓ₂, f₁, f₂)
     WeakForm(a, l)
-end
+end # function
 
 """
     build_weak_form(::CUTFEM, measures, domain, h, γg, order, f₁, f₂) -> WeakForm
@@ -147,7 +158,7 @@ function build_weak_form(::CUTFEM, measures::Measures, domain::Domain,
     l = _l_standard(measures.dΩ⁻, measures.dΓ₁, domain.nΓ₁,
                     measures.dΓ₂, domain.nΓ₂, f₁, f₂)
     WeakForm(a, l)
-end
+end # function
 
 """
     build_weak_form(::SBM, measures, domain, n, d, f₁, f₂, f₂sbm) -> WeakForm
@@ -162,7 +173,7 @@ function build_weak_form(::SBM, measures::Measures, domain::Domain,
     l = _l_sbm(measures.dΩ⁻, measures.dΓ₁, domain.nΓ₁,
                 measures.dΓ₂, domain.nΓ₂, dist, f₁, f₂)
     WeakForm(a, l)
-end
+end # function
 
 """
     build_weak_form(::WSBM, measures, domain, n, d, α, h, γg, order, f₁, f₂, f₂sbm) -> WeakForm
@@ -182,4 +193,4 @@ function build_weak_form(::WSBM, measures::Measures, domain::Domain,
                 measures.dΓ₂, domain.nΓ₂,
                 dist, α, f₁, f₂)
     WeakForm(a, l)
-end
+end # function

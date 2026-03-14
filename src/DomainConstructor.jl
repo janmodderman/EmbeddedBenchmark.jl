@@ -5,11 +5,6 @@ using STLCutters
 using GridapEmbedded.Interfaces
 using STLCutters: STLEmbeddedDiscretization
 
-export Domain, DomainConfig, DomainSide, INSIDE, OUTSIDE
-export build_domain, build_reference_domain
-
-export Measures, build_measures
-
 # ===================================================
 # Domain Side
 # ===================================================
@@ -32,7 +27,7 @@ struct DomainConfig
     side::DomainSide
     intersected::Bool
     Γ₂_tags::Vector{String}
-end
+end # struct
 
 DomainConfig(side::DomainSide, intersected::Bool) = DomainConfig(side, intersected, ["top"])
 DomainConfig() = DomainConfig(OUTSIDE, true, ["top"])
@@ -75,7 +70,7 @@ function _get_flags(config::DomainConfig)
             flip_normal    = false
         )
     end
-end
+end # function
 
 # ===================================================
 # Domain Struct
@@ -106,7 +101,7 @@ struct Domain{T1,T2,T3,T4,T5,T6,T7,T8,T9}
     E⁰::T7
     nE⁰::T8
     Ωwsbm::T9
-end
+end # struct
 
 # ===================================================
 # Base Builders (private)
@@ -120,7 +115,7 @@ function _build_agfem_base(cutgeo, cutgeo_facets, config::DomainConfig)
     Γ₂    = BoundaryTriangulation(cutgeo_facets, f.physical_flag, tags=config.Γ₂_tags)
     nΓ₂   = get_normal_vector(Γ₂)
     return Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂
-end
+end # function
 
 function _build_sbm_base(cutgeo, config::DomainConfig)
     f     = _get_flags(config)
@@ -131,7 +126,7 @@ function _build_sbm_base(cutgeo, config::DomainConfig)
     Γ₂    = BoundaryTriangulation(Ω⁻act, tags=config.Γ₂_tags)
     nΓ₂   = get_normal_vector(Γ₂)
     return Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂
-end
+end # function
 
 # ===================================================
 # Public Build Functions
@@ -139,7 +134,7 @@ end
 function build_domain(method::AGFEM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
     Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_agfem_base(cutgeo, cutgeo_facets, config)
     Domain(Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, nothing, nothing, nothing)
-end
+end # function
 
 function build_domain(method::CUTFEM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
     f     = _get_flags(config)
@@ -147,12 +142,12 @@ function build_domain(method::CUTFEM, cutgeo, cutgeo_facets, config::DomainConfi
     E⁰    = GhostSkeleton(cutgeo, f.ghost_flag)
     nE⁰   = get_normal_vector(E⁰)
     Domain(Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, nothing)
-end
+end # function
 
 function build_domain(method::SBM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
     Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_sbm_base(cutgeo, config)
     Domain(Ω⁻act, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, nothing, nothing, nothing)
-end
+end # function
 
 function build_domain(method::WSBM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
     f     = _get_flags(config)
@@ -161,12 +156,12 @@ function build_domain(method::WSBM, cutgeo, cutgeo_facets, config::DomainConfig=
     nE⁰   = get_normal_vector(E⁰)
     Ωwsbm  = (Interior(cutgeo, f.sbm_inner), Interior(cutgeo, f.sbm_cut))
     Domain(Ω⁻act, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, Ωwsbm)
-end
+end # function
 
 # STL wrapper — delegates to embedded discretization versions
 function build_domain(method::EmbeddingMethod, cutgeo::STLEmbeddedDiscretization, cutgeo_facets, config::DomainConfig=DomainConfig())
     build_domain(method, cutgeo.cut, cutgeo.cutfacets, config)
-end
+end # function
 
 # Reference domain uses SBM surrogate — cutgeo_facets unused
 build_reference_domain(cutgeo, config::DomainConfig=DomainConfig()) = build_domain(SBM(), cutgeo, nothing, config)
@@ -191,7 +186,7 @@ struct Measures{T1,T2,T3,T4}
     dΓ₁::T2
     dΓ₂::T3
     dE⁰::T4
-end
+end # struct
 
 # ===================================================
 # Build Measures from Domain
@@ -208,7 +203,7 @@ function build_measures(domain::Domain, degree::Int)
     dΓ₂ = domain.Γ₂  !== nothing ? Measure(domain.Γ₂,  degree) : nothing
     dE⁰ = domain.E⁰  !== nothing ? Measure(domain.E⁰,  degree) : nothing
     return Measures(dΩ⁻, dΓ₁, dΓ₂, dE⁰)
-end
+end # function
 
 # Helper — extract WSBM interior measures from domain.Ωsbm
 function _get_wsbm_measures(domain::Domain, degree::Int64)
@@ -216,7 +211,7 @@ function _get_wsbm_measures(domain::Domain, degree::Int64)
     dΩᵢ = Measure(domain.Ωwsbm[1], degree)   
     dΩₒ = Measure(domain.Ωwsbm[2], degree)
     return dΩᵢ, dΩₒ
-end
+end # function
 
 # ===================================================
 # Volume fraction for WSBM
@@ -237,8 +232,8 @@ function volume_fraction(cutgeo::EmbeddedDiscretization, Ω⁻act::Triangulation
     A[inds]      = γvol
 
     CellField(A, Ω⁻act)
-end
+end # function
 
 function volume_fraction(cutgeo::STLEmbeddedDiscretization, Ω⁻act::Triangulation)
     volume_fraction(cutgeo.cut, Ω⁻act)
-end
+end # function

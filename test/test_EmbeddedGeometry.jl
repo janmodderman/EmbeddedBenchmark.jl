@@ -11,20 +11,19 @@ using EmbeddedBenchmark
 # ===================================================
 # Test helper
 # ===================================================
-function _test_distances(geo, bgmodel, Γ, fun, degree, pmid, R)
+function _test_distances(dist_data, Γ, fun, degree, pmid, R)
 
-    dist_data = compute_distances(SBM(), bgmodel, geo, Γ, fun, degree, 0.0)
     QΓ          = CellQuadrature(Γ, degree)
     phys_points = get_cell_points(QΓ).cell_phys_point
-    N           = length(pmid)  # spatial dimension
+    N           = length(pmid)
 
     @testset "type consistency" begin
-        @test dist_data isa DistanceData
-        @test dist_data.d    isa CellState
-        @test dist_data.n    isa CellState
-        @test dist_data.Xd   isa CellState
-        @test dist_data.fsbm isa CellState
-        @test dist_data.Xd.values isa Vector
+        @test dist_data             isa DistanceData
+        @test dist_data.d           isa CellState
+        @test dist_data.n           isa CellState
+        @test dist_data.Xd          isa CellState
+        @test dist_data.fsbm        isa CellState
+        @test dist_data.Xd.values   isa Vector
     end
 
     @testset "Xd = x + d" begin
@@ -58,8 +57,8 @@ function _test_distances(geo, bgmodel, Γ, fun, degree, pmid, R)
     @testset "Xd lies on geometry boundary" begin
         for icell in 1:length(phys_points)
             for ipoint in 1:length(phys_points[icell])
-                Xd   = dist_data.Xd.values[icell][ipoint]
-                δ    = Xd - pmid
+                Xd = dist_data.Xd.values[icell][ipoint]
+                δ  = Xd - pmid
                 @test sqrt(δ ⋅ δ) ≈ R   atol=1e-10
             end
         end
@@ -270,27 +269,63 @@ end
 
     @testset "Compute Distances" begin
         @testset "compute_distances SBM — 2D Cylinder" begin
-            n       = 6
+            n       = 8
             Lₓ, L₃, R = 1.0, 0.5, 0.25
             pmid    = VectorValue(0.0, 0.0)
+            degree  = 2
             bgmodel = CartesianDiscreteModel(Point(-Lₓ/2, -L₃), Point(Lₓ/2, 0.0), (n, n))
             geo     = CylinderGeometry(R, pmid)
             cutgeo, _ = geometry_cut(bgmodel, geo)
             Γ       = Interface(Interior(cutgeo, ACTIVE_IN), Interior(cutgeo, OUT)).⁻
             fun     = x -> VectorValue(x[1], x[2])
-            _test_distances(geo, bgmodel, Γ, fun, 2, pmid, R)
+            dist_data = compute_distances(SBM(), bgmodel, geo, Γ, fun, degree, 0.0)
+            _test_distances(dist_data, Γ, fun, degree, pmid, R)
         end
 
         @testset "compute_distances SBM — 3D Sphere" begin
-            n       = 6
+            n       = 8
             Lₓ, L₃, R = 1.0, 0.5, 0.25
             pmid    = VectorValue(0.0, 0.0, 0.0)
+            degree  = 2
             bgmodel = CartesianDiscreteModel(Point(-Lₓ/2, -Lₓ/2, -L₃), Point(Lₓ/2, Lₓ/2, 0.0), (n, n, n))
             geo     = SphereGeometry(R, pmid)
             cutgeo, _ = geometry_cut(bgmodel, geo)
             Γ       = Interface(Interior(cutgeo, ACTIVE_IN), Interior(cutgeo, OUT)).⁻
             fun     = x -> VectorValue(x[1], x[2], x[3])
-            _test_distances(geo, bgmodel, Γ, fun, 2, pmid, R)
+            dist_data = compute_distances(SBM(), bgmodel, geo, Γ, fun, degree, 0.0)
+            _test_distances(dist_data, Γ, fun, degree, pmid, R)
+        end
+
+                @testset "compute_distances WSBM — 2D Cylinder" begin
+            n       = 8
+            Lₓ, L₃, R = 1.0, 0.5, 0.25
+            pmid    = VectorValue(0.0, 0.0)
+            degree  = 2
+            bgmodel = CartesianDiscreteModel(Point(-Lₓ/2, -L₃), Point(Lₓ/2, 0.0), (n, n))
+            geo     = CylinderGeometry(R, pmid)
+            cutgeo, _ = geometry_cut(bgmodel, geo)
+            Γ       = Interface(Interior(cutgeo, ACTIVE_OUT), Interior(cutgeo, IN)).⁻
+            Λ       = GhostSkeleton(cutgeo, ACTIVE_OUT)
+            fun     = x -> VectorValue(x[1], x[2])
+            dist_data = compute_distances(WSBM(), bgmodel, geo, Γ, Λ, fun, degree, 0.0)
+            _test_distances(dist_data.boundary, Γ, fun, degree, pmid, R)
+            _test_distances(dist_data.edges, Λ.⁻, fun, degree, pmid, R)
+        end
+
+        @testset "compute_distances WSBM — 3D Sphere" begin
+            n       = 8
+            Lₓ, L₃, R = 1.0, 0.5, 0.25
+            pmid    = VectorValue(0.0, 0.0, 0.0)
+            degree  = 2
+            bgmodel = CartesianDiscreteModel(Point(-Lₓ/2, -Lₓ/2, -L₃), Point(Lₓ/2, Lₓ/2, 0.0), (n, n, n))
+            geo     = SphereGeometry(R, pmid)
+            cutgeo, _ = geometry_cut(bgmodel, geo)
+            Γ       = Interface(Interior(cutgeo, ACTIVE_OUT), Interior(cutgeo, IN)).⁻
+            Λ       = GhostSkeleton(cutgeo, ACTIVE_OUT)
+            fun     = x -> VectorValue(x[1], x[2], x[3])
+            dist_data = compute_distances(WSBM(), bgmodel, geo, Γ, Λ, fun, degree, 0.0)
+            _test_distances(dist_data.boundary, Γ, fun, degree, pmid, R)
+            _test_distances(dist_data.edges, Λ.⁻, fun, degree, pmid, R)
         end
     end
 end 

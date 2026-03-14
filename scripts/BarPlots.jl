@@ -1,6 +1,6 @@
 using EmbeddedBenchmark
 
-method   = SBM()                  # ← only change this: AGFEM(), CUTFEM(), SBM(), WSBM()
+method   = WSBM()                  # ← only change this: AGFEM(), CUTFEM(), SBM(), WSBM()
 geometry = :cylinder                # ← only change this if you want to benchmark a different geometry (currently only :cylinder is implemented, but you could add more in EmbeddedGeometry.jl and adjust the parameters accordingly in the SimulationParams constructor below)
 
 # ===================================================
