@@ -14,20 +14,21 @@ struct WSBM   <: EmbeddingMethod end
 Geometric parameters for the simulation domain in N dimensions.
 """
 struct GeometryParams{N}
-    L₁::Float64         # horizontal domain length (x-direction)
-    L₂::Float64         # horizontal domain length (y-direction, 3D only)
-    L₃::Float64         # vertical domain length
-    R::Float64          # radius (cylinder/sphere)
+    L₁::Float64                 # horizontal domain length (x-direction)
+    L₂::Float64                 # horizontal domain length (y-direction, 3D only)
+    L₃::Float64                 # vertical domain length
+    x₀::VectorValue{N,Float64}  # domain midpoint (cylinder center in 2D, sphere center in 3D)
+    R::Float64                  # radius (cylinder/sphere)
 
-    function GeometryParams{N}(L₁, L₂, L₃, R) where {N}
+    function GeometryParams{N}(L₁, L₂, L₃, x₀, R) where {N}
         _check_dim(N)
-        new{N}(L₁, L₂, L₃, R)
+        new{N}(L₁, L₂, L₃, x₀, R)
     end
 end
 
 # Convenience constructors
-GeometryParams2D(L₁, L₃, R)     = GeometryParams{2}(L₁, 0.0, L₃, R)
-GeometryParams3D(L₁, L₂, L₃, R) = GeometryParams{3}(L₁, L₂, L₃, R)
+GeometryParams2D(L₁, L₃, x₀, R)     = GeometryParams{2}(L₁, 0.0, L₃, x₀, R)
+GeometryParams3D(L₁, L₂, L₃, x₀, R) = GeometryParams{3}(L₁, L₂, L₃, x₀, R)
 
 """
     struct ManufacturedParams{P}

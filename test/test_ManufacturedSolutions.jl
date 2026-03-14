@@ -6,6 +6,10 @@ using StaticArrays
 using ForwardDiff
 using EmbeddedBenchmark
 
+"""
+    TO DO: overhaul: remove dependency on ForwardDiff
+"""
+
 # ===================================================
 # Test parameters
 # ===================================================
