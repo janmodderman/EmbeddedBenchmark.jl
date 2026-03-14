@@ -2,10 +2,10 @@ using EmbeddedBenchmark
 
 geometry = :cylinder                # ← only change this if you want to benchmark a different geometry (currently only :cylinder is implemented, but you could add more in EmbeddedGeometry.jl and adjust the parameters accordingly in the SimulationParams constructor below)
 
-paths = ["data/agfem_$(geometry).json", "data/cutfem_$(geometry).json"]
+# paths = ["data/agfem_$(geometry).json", "data/cutfem_$(geometry).json"]
 
-# paths = ["data/agfem_cylinder.json", "data/cutfem_cylinder.json",
-#          "data/sbm_cylinder.json",   "data/wsbm_cylinder.json"]
+paths = ["data/agfem_cylinder.json", "data/cutfem_cylinder.json",
+         "data/sbm_cylinder.json"]#,   "data/wsbm_cylinder.json"]
 
 l2_plots   = plot_L2_from_files(paths)
 

@@ -9,6 +9,5 @@ paths = ["data/agfem_$(geometry).json", "data/cutfem_$(geometry).json"]
 
 cond_plots = plot_cond_from_files(paths)
 
-# Display individually
 display(cond_plots[1])   # order 1
 display(cond_plots[2])   # order 2
