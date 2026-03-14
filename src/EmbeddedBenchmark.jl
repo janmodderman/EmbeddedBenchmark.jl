@@ -2,8 +2,6 @@ module EmbeddedBenchmark
 using Gridap
 using GridapEmbedded
 using GridapEmbedded.LevelSetCutters
-# using ForwardDiff
-# using StaticArrays
 using STLCutters
 using LinearAlgebra
 using JSON3
@@ -28,10 +26,11 @@ export DomainSide, INSIDE, OUTSIDE
 export DomainConfig
 export Domain, build_domain, build_reference_domain
 export Measures, build_measures
+export volume_fraction
 
 # EmbeddedGeometry.jl
 export EmbeddedGeometry, CylinderGeometry, SphereGeometry
-export build_geometry, geometry_cut
+export build_geometry, geometry_cut, compute_distances, DistanceData
 
 # FESpaces.jl
 export FESpaceConfig, FESpaces, build_spaces
@@ -43,6 +42,7 @@ export WeakForm, build_weak_form
 export benchmark, print_benchmark_results
 export method_categories
 
+# PostProcessing.jl 
 export TAG_COLORS, FALLBACK_COLOR
 export plot_bar, plot_bar!
 export save_benchmark, load_benchmark, plot_bar_from_file

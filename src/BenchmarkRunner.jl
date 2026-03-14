@@ -10,7 +10,7 @@ using LinearAlgebra
 # Categories — shared + method-specific
 # ===================================================
 const CATEGORIES_BASE = [:model, :cutting, :domain, :quadratures, :spaces,
-                         :weak_form, :interior_matrix, :rhs, :affine, :solving]
+                            :weak_form, :interior_matrix, :rhs, :affine, :solving]
 
 method_categories(::AGFEM)  = CATEGORIES_BASE
 method_categories(::CUTFEM) = vcat(CATEGORIES_BASE, [:ghost_matrix])
@@ -21,12 +21,12 @@ method_categories(::WSBM)   = vcat(CATEGORIES_BASE, [:ghost_matrix, :boundary_ma
 # Method-specific: build spaces
 # ===================================================
 function _build_spaces(method::AGFEM, domain, fe_config, sol,
-                       cutgeo, embedded_geo, domain_config)
+                        cutgeo, embedded_geo, domain_config)
     build_spaces(method, domain, fe_config, sol, cutgeo, embedded_geo, domain_config)
 end
 
 function _build_spaces(method::EmbeddingMethod, domain, fe_config, sol,
-                       cutgeo, embedded_geo, domain_config)
+                        cutgeo, embedded_geo, domain_config)
     build_spaces(method, domain, fe_config, sol)
 end
 
@@ -34,28 +34,36 @@ end
 # Method-specific: build weak form
 # ===================================================
 function _build_weak_form(method::AGFEM, measures, domain, f₁, f₂;
-                          h, γg, order, degree)
+                            h, γg, order, degree, n=nothing, d=nothing, fsbm=nothing, α=nothing)
     build_weak_form(method, measures, domain, f₁, f₂)
 end
 
 function _build_weak_form(method::CUTFEM, measures, domain, f₁, f₂;
-                          h, γg, order, degree)
+                            h, γg, order, degree, n=nothing, d=nothing, fsbm=nothing, α=nothing)
     build_weak_form(method, measures, domain, h, γg, order, f₁, f₂)
 end
 
 function _build_weak_form(method::SBM, measures, domain, f₁, f₂;
-                          h, γg, order, degree)
-    n = domain.nΓ₁
-    d = CellField(zero(VectorValue{2,Float64}), domain.Γ₁)
-    build_weak_form(method, measures, domain, n, d, f₁, f₂, f₁)
+                            h, γg, order, degree, n=nothing, d=nothing,
+                            fsbm=nothing, α=nothing, dist=nothing)
+    build_weak_form(method, measures, domain, dist, f₁, f₂)
 end
 
 function _build_weak_form(method::WSBM, measures, domain, f₁, f₂;
-                          h, γg, order, degree)
-    n = domain.nΓ₁
-    d = CellField(zero(VectorValue{2,Float64}), domain.Γ₁)
-    α = CellField(1.0, domain.Ω⁻)
-    build_weak_form(method, measures, domain, n, d, α, h, γg, order, f₁, f₂, f₁)
+                            h, γg, order, degree, n=nothing, d=nothing,
+                            fsbm=nothing, α=nothing, dist=nothing)
+    build_weak_form(method, measures, domain, dist, α, h, γg, order, f₁, f₂)
+end
+
+# ===================================================
+# Method-specific: for WSBM, get volume fraction
+# ===================================================
+
+function _get_volume_fraction(::AGFEM,  cutgeo, domain) return nothing end
+function _get_volume_fraction(::CUTFEM, cutgeo, domain) return nothing end
+function _get_volume_fraction(::SBM,    cutgeo, domain) return nothing end
+function _get_volume_fraction(::WSBM,   cutgeo, domain)
+    volume_fraction(cutgeo, domain.Ωwsbm)
 end
 
 # ===================================================
@@ -106,12 +114,34 @@ function _build_affine_operator(wf, spaces, ::WSBM)
 end
 
 # ===================================================
+# Distance functions — only needed for SBM/WSBM, but define for all for simplicity of build_spaces dispatch
+# ===================================================
+
+function _get_distance_functions(method::SBM, embedded_geo,
+                                    f₀, model, domain, measures, degree, t)
+    compute_distances(method, model, embedded_geo, domain.Γ₁, f₀, degree, t)
+end
+
+function _get_distance_functions(method::WSBM, embedded_geo,
+                                    f₀, model, domain, measures, degree, t)
+    compute_distances(method, model, embedded_geo, domain.Γ₁, domain.E⁰, f₀, degree, t)
+end
+
+function _get_distance_functions(::AGFEM,  embedded_geo, f₀, model, domain, measures, degree, t)
+    return nothing
+end
+
+function _get_distance_functions(::CUTFEM, embedded_geo, f₀, model, domain, measures, degree, t)
+    return nothing
+end
+
+# ===================================================
 # Single full pipeline run
 # ===================================================
 function _single_run(method::EmbeddingMethod, params::SimulationParams{N},
-                     sol::ManufacturedSolution{N}, embedded_geo,
-                     domain_config::DomainConfig, fe_config::FESpaceConfig,
-                     f₁::Function, f₂::Function) where {N}
+                        sol::ManufacturedSolution{N}, embedded_geo,
+                        domain_config::DomainConfig, fe_config::FESpaceConfig,
+                        f₁::Function, f₂::Function) where {N}
 
     degree = 2 * params.solver.order
     h      = params.geometry.L₁ / params.solver.n
@@ -120,8 +150,8 @@ function _single_run(method::EmbeddingMethod, params::SimulationParams{N},
     a      = Dict{Symbol, Int}()
 
     # 1. Model
-    t[:model] = @elapsed  model, _ = setup_model(params)
-    a[:model] = @allocated setup_model(params)
+    t[:model]  = @elapsed  model, _ = setup_model(params)
+    a[:model]  = @allocated setup_model(params)
 
     # 2. Cutting
     t[:cutting] = @elapsed begin
@@ -139,7 +169,7 @@ function _single_run(method::EmbeddingMethod, params::SimulationParams{N},
         build_domain(method, cutgeo, cutgeo_facets, domain_config)
     end
 
-    # Reference SBM domain for L2 norm — not timed
+    # Reference domain for L2 norm — not timed
     ref_domain = build_reference_domain(cutgeo, domain_config)
     dΩsbm      = Measure(ref_domain.Ω⁻, degree)
 
@@ -151,24 +181,46 @@ function _single_run(method::EmbeddingMethod, params::SimulationParams{N},
         build_measures(domain, degree)
     end
 
+    # 4b. Distance functions — after domain and measures are available
+    t[:distances] = @elapsed begin
+        dist_data = _get_distance_functions(method, embedded_geo,
+                                            f₂, model, domain, measures, degree,
+                                            fe_config.t)
+    end
+    a[:distances] = @allocated begin
+        _get_distance_functions(method, embedded_geo,
+                                f₂, model, domain, measures, degree,
+                                fe_config.t)
+    end
+
+    # 4c. Volume fraction — WSBM only
+    t[:volume_fraction] = @elapsed begin
+        α = _get_volume_fraction(method, cutgeo, domain)
+    end
+    a[:volume_fraction] = @allocated begin
+        _get_volume_fraction(method, cutgeo, domain)
+    end
+
     # 5. FE spaces
     t[:spaces] = @elapsed begin
         spaces = _build_spaces(method, domain, fe_config, sol,
-                               cutgeo, embedded_geo, domain_config)
+                                cutgeo, embedded_geo, domain_config)
     end
     a[:spaces] = @allocated begin
         _build_spaces(method, domain, fe_config, sol,
-                      cutgeo, embedded_geo, domain_config)
+                        cutgeo, embedded_geo, domain_config)
     end
 
     # 6. Weak form
     t[:weak_form] = @elapsed begin
         wf = _build_weak_form(method, measures, domain, f₁, f₂;
-                              h=h, γg=γg, order=params.solver.order, degree=degree)
+                            h=h, γg=γg, order=params.solver.order,
+                            degree=degree, α=α, dist=dist_data)
     end
     a[:weak_form] = @allocated begin
         _build_weak_form(method, measures, domain, f₁, f₂;
-                         h=h, γg=γg, order=params.solver.order, degree=degree)
+                        h=h, γg=γg, order=params.solver.order,
+                        degree=degree, α=α, dist=dist_data)
     end
 
     # 7. Interior matrix
@@ -206,12 +258,10 @@ function _single_run(method::EmbeddingMethod, params::SimulationParams{N},
         solve(LUSolver(), op)
     end
 
-    # L2 norm on reference SBM domain — not timed
+    # L2 norm — not timed
     u, _, _  = manufactured_functions(sol)
     l2norm   = sqrt(sum(∫((ϕₕ - (x -> u(x, fe_config.t)))*(ϕₕ - (x -> u(x, fe_config.t))))dΩsbm))
-
-    # Condition number in L1 norm
-    cn = cond(get_matrix(op), 1)
+    cn       = cond(get_matrix(op), 1)
 
     return t, a, l2norm, cn
 end
@@ -230,11 +280,11 @@ The `n` field in params is overridden per nₓ iteration — all other
 parameters are taken directly from params.
 """
 function benchmark(method::EmbeddingMethod, nₓ_vec::Vector{Int},
-                   params::SimulationParams{N};
-                   n_runs   = 10,
-                   n_warmup = 3,
-                   geometry = :cylinder,
-                   orders   = [params.solver.order]) where {N}
+                    params::SimulationParams{N};
+                    n_runs   = 10,
+                    n_warmup = 3,
+                    geometry = :cylinder,
+                    orders   = [params.solver.order]) where {N}
 
     is_stl = geometry ∈ (:sphere_stl, :bunny)
 
@@ -242,22 +292,23 @@ function benchmark(method::EmbeddingMethod, nₓ_vec::Vector{Int},
     Lₓ  = params.geometry.L₁
     L₃  = params.geometry.L₃
     R   = params.geometry.R
+    x₀  = params.geometry.x₀
     g   = params.manufactured.g
     k   = params.manufactured.k
     η₀  = params.manufactured.η₀
     γg  = params.solver.γg
 
     sol = N == 2 ? AirySolution2D(g, k, η₀, L₃) :
-                   AirySolution3D(g, k, η₀, L₃)
+                    AirySolution3D(g, k, η₀, L₃)
 
     embedded_geo = if is_stl
         stl_file = geometry == :sphere_stl ? "data/meshes/sphere.stl" :
-                                             "data/meshes/bunnylow.stl"
+                                                "data/meshes/bunnylow.stl"
         STLGeometry(stl_file)
     elseif N == 2
-        CylinderGeometry(R, L₃/2, Lₓ, L₃)
+        CylinderGeometry(R, x₀)
     else
-        SphereGeometry(R, L₃/2, Lₓ, L₃)
+        SphereGeometry(R, x₀)
     end
 
     domain_config = DomainConfig(OUTSIDE, true)
@@ -287,8 +338,8 @@ function benchmark(method::EmbeddingMethod, nₓ_vec::Vector{Int},
                 GC.gc()
                 GC.enable(false)
                 times, allocs, l2norm, cn = _single_run(method, run_params, sol,
-                                                         embedded_geo, domain_config,
-                                                         fe_config, f₁, f₂)
+                                                        embedded_geo, domain_config,
+                                                        fe_config, f₁, f₂)
                 GC.enable(true)
 
                 run <= n_warmup && continue
@@ -312,7 +363,7 @@ end
 # Pretty-print results
 # ===================================================
 function print_benchmark_results(method::EmbeddingMethod, min_times, min_allocs,
-                                  l2s, cns, nₓ_vec, orders)
+                                    l2s, cns, nₓ_vec, orders)
     cats = method_categories(method)
     w    = 20 + 24*length(nₓ_vec)
     sep  = "="^w
@@ -330,8 +381,8 @@ function print_benchmark_results(method::EmbeddingMethod, min_times, min_allocs,
         for cat in cats
             row = rpad(string(cat), 20) *
                   join(lpad(round(min_times[order][nₓ][cat],  sigdigits=4), 12) *
-                       lpad(min_allocs[order][nₓ][cat], 12)
-                       for nₓ in nₓ_vec)
+                        lpad(min_allocs[order][nₓ][cat], 12)
+                        for nₓ in nₓ_vec)
             println(row)
         end
 

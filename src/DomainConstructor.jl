@@ -126,7 +126,7 @@ function _build_sbm_base(cutgeo, config::DomainConfig)
     f     = _get_flags(config)
     Ω⁻act = Interior(cutgeo, f.active_flag)
     Ω⁻pas = Interior(cutgeo, f.inactive_flag)
-    Γ₁    = Interface(Ω⁻pas, Ω⁻act).⁻
+    Γ₁    = Interface(Ω⁻pas, Ω⁻act).⁻                   # TO DO: verify that we do not need to flip to .⁺ if we flip from OUTSIDE to INSIDE
     nΓ₁   = get_normal_vector(Γ₁)
     Γ₂    = BoundaryTriangulation(Ω⁻act, tags=config.Γ₂_tags)
     nΓ₂   = get_normal_vector(Γ₂)
@@ -216,4 +216,29 @@ function _get_wsbm_measures(domain::Domain, degree::Int64)
     dΩᵢ = Measure(domain.Ωwsbm[1], degree)   
     dΩₒ = Measure(domain.Ωwsbm[2], degree)
     return dΩᵢ, dΩₒ
+end
+
+# ===================================================
+# Volume fraction for WSBM
+# ===================================================
+function volume_fraction(cutgeo::EmbeddedDiscretization, Ω⁻act::Triangulation)
+    Ω⁻    = Interior(cutgeo, CUT_OUT)
+    Ω⁻cut = Interior(cutgeo, CUT)
+
+    vol⁻    = get_cell_measure(Ω⁻, Ω⁻cut)
+    vol⁻act = get_cell_measure(Ω⁻cut)
+    γvol    = vol⁻ ./ vol⁻act
+
+    bg_to_ioc    = compute_bgcell_to_inoutcut(cutgeo, cutgeo.geo)
+    cell_to_mask = collect(Bool, bg_to_ioc .!= -1)
+    bg_to_ioc2   = bg_to_ioc[cell_to_mask]
+    inds         = findall(x -> x == 0, bg_to_ioc2)
+    A            = float(bg_to_ioc2)
+    A[inds]      = γvol
+
+    CellField(A, Ω⁻act)
+end
+
+function volume_fraction(cutgeo::STLEmbeddedDiscretization, Ω⁻act::Triangulation)
+    volume_fraction(cutgeo.cut, Ω⁻act)
 end
