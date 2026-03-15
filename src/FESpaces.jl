@@ -70,7 +70,7 @@ Aggregation flag is derived from DomainConfig — consistent with _get_flags.
 """
 function build_spaces(::AGFEM, domain::Domain, config::FESpaceConfig, u::ManufacturedSolution,
                         cutgeo, g::EmbeddedGeometry, domain_config::DomainConfig)
-    f          = _get_flags(domain_config)
+    f          = _get_flags(domain_config, AGFEM())
     geo        = build_geometry(g)
     reffe      = ReferenceFE(lagrangian, Float64, config.order)
     Vstd       = TestFESpace(domain.Ω⁻act, reffe; dirichlet_tags=config.dirichlet_tags)

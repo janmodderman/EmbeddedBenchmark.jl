@@ -165,7 +165,7 @@ using Gridap.Geometry
         # ---------------------------------------------------
         @testset "WSBM" begin
             domain = build_domain(WSBM(), cutgeo, nothing, config_out)
-            @test domain.Ω⁻act === nothing   # no separate active domain
+            @test domain.Ω⁻act isa Triangulation   # no separate active domain
             @test domain.E⁰    isa SkeletonTriangulation   # ghost skeleton present
             @test domain.nE⁰   isa SkeletonPair{<:CellField}   # ghost skeleton normal present
             @test domain.Ωwsbm  isa Tuple{<:Triangulation, <:Triangulation}   # SBM domains present
@@ -256,7 +256,7 @@ end
         domain   = build_domain(WSBM(), cutgeo, nothing, config)
         measures = build_measures(domain, degree)
         @test measures isa Measures
-        @test measures.dΩ⁻ isa Measure
+        @test measures.dΩ⁻ isa Tuple{<:Measure,<:Measure}
         @test measures.dΓ₁ isa Measure
         @test measures.dΓ₂ isa Measure
         @test measures.dE⁰ isa Measure

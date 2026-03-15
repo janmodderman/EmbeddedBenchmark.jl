@@ -41,12 +41,14 @@ export WeakForm, build_weak_form
 # BenchmarkRunner.jl
 export benchmark, print_benchmark_results
 export method_categories
+export convergence_run
 
 # PostProcessing.jl 
-export TAG_COLORS, FALLBACK_COLOR
+export TAG_COLORS, FALLBACK_COLOR, METHOD_COLORS
 export plot_bar, plot_bar!
 export save_benchmark, load_benchmark, plot_bar_from_file
 export plot_L2_from_files, plot_cond_from_files
+export save_convergence, load_convergence
 
 
 include("Parameters.jl")

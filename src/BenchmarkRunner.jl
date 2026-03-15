@@ -1,10 +1,4 @@
-# using Gridap
-# using GridapEmbedded
-# using GridapEmbedded.LevelSetCutters
-# using STLCutters
 using LinearAlgebra
-
-# export benchmark, print_benchmark_results
 
 # ===================================================
 # Categories — shared + method-specific
@@ -311,7 +305,7 @@ function benchmark(method::EmbeddingMethod, nₓ_vec::Vector{Int},
         SphereGeometry(R, x₀)
     end
 
-    domain_config = DomainConfig(OUTSIDE, true)
+    domain_config = DomainConfig(OUTSIDE)
     cats          = method_categories(method)
 
     min_times  = Dict(order => Dict(nₓ => Dict(cat => Inf   for cat in cats) for nₓ in nₓ_vec) for order in orders)
@@ -395,4 +389,120 @@ function print_benchmark_results(method::EmbeddingMethod, min_times, min_allocs,
                 join(lpad(round(cns[order][nₓ], sigdigits=4), 24) for nₓ in nₓ_vec)
         println(cnrow)
     end
+end
+
+function convergence_study(method::EmbeddingMethod, params::SimulationParams{N},
+                    sol::ManufacturedSolution{N}, embedded_geo,
+                    domain_config::DomainConfig, fe_config::FESpaceConfig,
+                    f₁::Function, f₂::Function) where {N}
+
+    degree = 2 * params.solver.order
+    h      = params.geometry.L₁ / params.solver.n
+    γg     = params.solver.γg
+
+    # Manufactured functions
+    u, _, _ = manufactured_functions(sol)
+    f₀      = x -> u(x, fe_config.t)
+
+    # 1. Model
+    model, _ = setup_model(params)
+
+    # 2. Cutting
+    cutgeo, cutgeo_facets = geometry_cut(model, embedded_geo)
+
+    # 3. Domain
+    domain = build_domain(method, cutgeo, cutgeo_facets, domain_config)
+
+    # Reference domain for L2 norm
+    ref_domain = build_reference_domain(cutgeo, domain_config)
+    dΩsbm      = Measure(ref_domain.Ω⁻, degree)
+
+    # 4. Quadratures
+    measures = build_measures(domain, degree)
+
+    # 4b. Distance functions
+    dist_data = _get_distance_functions(method, embedded_geo,
+                                        f₂, model, domain, measures,
+                                        degree, fe_config.t)
+
+    # 4c. Volume fraction — WSBM only
+    α = _get_volume_fraction(method, cutgeo, domain)
+
+    # 5. FE spaces
+    spaces = _build_spaces(method, domain, fe_config, sol,
+                            cutgeo, embedded_geo, domain_config)
+
+    # 6. Weak form
+    wf = _build_weak_form(method, measures, domain, f₁, f₂;
+                            h=h, γg=γg, order=params.solver.order,
+                            degree=degree, α=α, dist=dist_data)
+
+    # 7. Affine operator
+    op = _build_affine_operator(wf, spaces, method)
+
+    # 8. Solve
+    ϕₕ = solve(LUSolver(), op)
+
+    # L2 norm
+    l2norm = sqrt(sum(∫((ϕₕ - f₀) * (ϕₕ - f₀))dΩsbm))
+
+    # Condition number
+    cn = cond(get_matrix(op), 1)
+
+    return l2norm, cn
+end
+
+function convergence_run(method::EmbeddingMethod, nₓ_vec::Vector{Int},
+                            params::SimulationParams{N};
+                            orders   = [params.solver.order],
+                            geometry = :cylinder,
+                            savefile = nothing) where {N}
+
+    Lₓ = params.geometry.L₁
+    L₃ = params.geometry.L₃
+    R  = params.geometry.R
+    γg = params.solver.γg
+
+    sol         = N == 2 ? AirySolution2D(params.manufactured.g,
+                                            params.manufactured.k,
+                                            params.manufactured.η₀, L₃) :
+                            AirySolution3D(params.manufactured.g,
+                                            params.manufactured.k,
+                                            params.manufactured.η₀, L₃)
+
+    embedded_geo  = N == 2 ? CylinderGeometry(R, params.geometry.x₀) :
+                                SphereGeometry(R,  params.geometry.x₀)
+
+    domain_config = DomainConfig(OUTSIDE)
+
+    l2s = Dict(order => Dict(nₓ => 0.0 for nₓ in nₓ_vec) for order in orders)
+    cns = Dict(order => Dict(nₓ => 0.0 for nₓ in nₓ_vec) for order in orders)
+
+    for order in orders
+        fe_config  = FESpaceConfig(order, ["DT"], 0.0)
+        u, ∇u, Δu = manufactured_functions(sol)
+        f₁         = x -> Δu(x, fe_config.t)
+        f₂         = x -> ∇u(x, fe_config.t)
+
+        for nₓ in nₓ_vec
+            run_params = SimulationParams(
+                params.geometry,
+                params.manufactured,
+                SolverParams(nₓ, order, γg, params.solver.folder)
+            )
+
+            println("$(typeof(method))  order=$order  nₓ=$nₓ")
+            l2, cn = convergence_study(method, run_params, sol, embedded_geo,
+                                domain_config, fe_config, f₁, f₂)
+            l2s[order][nₓ] = l2
+            cns[order][nₓ] = cn
+            println("  L2 = $(round(l2, sigdigits=4))  cond = $(round(cn, sigdigits=4))")
+        end
+    end
+
+    if savefile !== nothing
+        save_convergence(savefile, method, l2s, cns, nₓ_vec, orders)
+    end
+
+    return l2s, cns
 end

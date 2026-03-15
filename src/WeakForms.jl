@@ -34,17 +34,17 @@ _w_α(α, w, v) = α*(w⋅v)
 
 # Custom jump operator definitions: 
 # jump with normal product
-function jump_n(v,n_sur::SkeletonPair{<:CellField},n_true::CellState)
+function jump_n(v, n_sur::SkeletonPair{<:CellField}, n_true::CellState)
     n_sur.⁺ ⋅ ((n_true ⊗ n_true) ⋅ v.⁺) + n_sur.⁻ ⋅ ((n_true ⊗ n_true) ⋅ v.⁻)
 end # function
 
 # jump with normal product and distance
-function jump_d(v,d::CellState,n_sur::SkeletonPair{<:CellField},n_true::CellState)
-    n_sur.⁺ ⋅ ((n_true ⊗ n_true) ⋅ (v.⁺ ⋅ d)) + n_sur.⁻ ⋅ ((n_true ⊗ n_true) ⋅ (v.⁻ ⋅ d))
+function jump_d(v, d::CellState, n_sur::SkeletonPair{<:CellField}, n_true::CellState)
+    n_sur.⁺ ⋅ ((v.⁺ ⋅ d) ⋅ (n_true ⊗ n_true)) + n_sur.⁻ ⋅ ((v.⁻ ⋅ d) ⋅ (n_true ⊗ n_true))
 end # function
 
 # jump with normal product for rhs with shifted function
-function jump_rhs(n_sur::SkeletonPair{<:CellField},n_true::CellState,f::CellState)
+function jump_rhs(n_sur::SkeletonPair{<:CellField}, n_true::CellState, f::CellState)
     n_sur.⁺ ⋅ ((n_true ⊗ n_true) ⋅ f) + n_sur.⁻ ⋅ ((n_true ⊗ n_true) ⋅ f)
 end # function
 
@@ -57,7 +57,7 @@ function _a_interior(dΩ::Measure)
     (ϕ, v) -> ∫(∇(ϕ)⋅∇(v))dΩ
 end # function
 
-function _a_interior(dΩᵢ::Measure, dΩₒ::Measure, α::CellField)
+function _a_interior(dΩᵢ::Measure, dΩₒ::Measure, α::Vector{<:Float64})
     (ϕ, v) -> ∫(∇(ϕ)⋅∇(v))dΩᵢ + ∫((_w_α∘(α, ∇(ϕ), ∇(v))))dΩₒ
 end # function
 
@@ -73,13 +73,20 @@ end # function
 
 # --- Shift on edges ---
 function _a_shift_edge(dE⁰::Measure, nE⁰::SkeletonPair,
-                        dist_edg::DistanceData, α::CellField)
+                        dist_edg::DistanceData, α::Vector{<:Float64})
     d = dist_edg.d
     n = dist_edg.n
-    (ϕ, v) -> ∫(jump(nE⁰ * (_w_α ∘ (α, v))) ⋅ 
-                    ((((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ))) ⋅ n) * n - mean(∇(ϕ))))dE⁰ +
-                ∫(mean((_w_α ∘ (α, v))) ⋅ 
-                    (jump_d(∇∇(ϕ),d,nE⁰,n) + jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
+    # (ϕ, v) -> ∫((jump_n((_w_α ∘ (α, v)),nE⁰,n) ⋅ ( mean(∇(ϕ)))) - (jump((_w_α ∘ (α, v)) * nE⁰) ⋅ mean(∇(ϕ))))dE⁰ +
+    #             ∫(mean((_w_α ∘ (α, v))) ⋅ ( jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
+
+    (ϕ, v) -> ∫((jump_n((_w_α ∘ (α, v)),nE⁰,n) ⋅ ((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ)))) - (jump((_w_α ∘ (α, v)) * nE⁰) ⋅ mean(∇(ϕ))))dE⁰ +
+                ∫(mean((_w_α ∘ (α, v))) ⋅ (jump_d(∇∇(ϕ),d,nE⁰,n) + jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
+
+
+    # (ϕ, v) -> ∫(jump(nE⁰ * (_w_α ∘ (α, v))) ⋅ 
+    #                 ((((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ))) ⋅ n) * n - mean(∇(ϕ))))dE⁰ +
+    #             ∫(mean((_w_α ∘ (α, v))) ⋅ 
+    #                 (jump_d(∇∇(ϕ),d,nE⁰,n) + jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
 end # function
 
 # --- Shift on boundary ---
@@ -89,9 +96,10 @@ function _a_shift_boundary(dΓ₁::Measure, nΓ₁::CellField, dist::DistanceDat
     (ϕ, v) -> ∫((nΓ₁ ⋅ ( ( ((∇∇(ϕ) ⋅ d) + ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * v)dΓ₁
 end # function
 
-function _a_shift_boundary(dΓ₁::Measure, nΓ₁::CellField, dist::DistanceData, α::CellField)
+function _a_shift_boundary(dΓ₁::Measure, nΓ₁::CellField, dist::DistanceData, α::Vector{<:Float64})
     d = dist.d
     n = dist.n
+    # (ϕ, v) -> ∫((nΓ₁ ⋅ ((( ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * (_w_α ∘ (α, v)))dΓ₁
     (ϕ, v) -> ∫((nΓ₁ ⋅ ((((∇∇(ϕ) ⋅ d) + ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * (_w_α ∘ (α, v)))dΓ₁
 end # function
 
@@ -119,7 +127,7 @@ end # function
 function _l_wsbm(dΩᵢ::Measure, dΩₒ::Measure, dΓ₁::Measure, nΓ₁::CellField,
                     dE⁰::Measure, nE⁰::SkeletonPair,
                     dΓ₂::Measure, nΓ₂::CellField,
-                    dist::NamedTuple, α::CellField,
+                    dist::NamedTuple, α::Vector{<:Float64},
                     f₁::Function, f₂::Function)
     v -> ∫(f₁ * (_w_α ∘ (α, v)))dΩₒ + ∫(f₁ * v)dΩᵢ +
          ∫((nΓ₁ * (_w_α ∘ (α, v))) ⋅ dist.boundary.n * (dist.boundary.fsbm ⋅ dist.boundary.n))dΓ₁ +
@@ -181,7 +189,7 @@ end # function
 Build weak form for WSBM. Returns interior + boundary shift + ghost bilinear forms and weighted shifted RHS.
 """
 function build_weak_form(::WSBM, measures::Measures, domain::Domain,
-                            dist::NamedTuple, α::CellField,
+                            dist::NamedTuple, α::Vector{<:Float64},
                             h::Float64, γg::Float64, order::Int64,
                             f₁::Function, f₂::Function)
     a = (interior = _a_interior(measures.dΩ⁻[1], measures.dΩ⁻[2], α),

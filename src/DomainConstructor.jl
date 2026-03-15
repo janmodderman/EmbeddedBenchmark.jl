@@ -18,19 +18,17 @@ using STLCutters: STLEmbeddedDiscretization
 
 Configuration for domain construction derived from two physical choices:
 - `side`:         is the physical domain INSIDE or OUTSIDE the embedded boundary?
-- `intersected`:  does the embedded boundary intersect a domain boundary?
 - `Γ₂_tags`:      boundary tags for the external boundary Γ₂ (default: `["top"]`)
 
 All GridapEmbedded flags and normal sign conventions are derived automatically.
 """
 struct DomainConfig
     side::DomainSide
-    intersected::Bool
     Γ₂_tags::Vector{String}
 end # struct
 
-DomainConfig(side::DomainSide, intersected::Bool) = DomainConfig(side, intersected, ["top"])
-DomainConfig() = DomainConfig(OUTSIDE, true, ["top"])
+DomainConfig(side::DomainSide) = DomainConfig(side, ["top"])
+DomainConfig() = DomainConfig(OUTSIDE, ["top"])
 
 # ===================================================
 # Flag Derivation
@@ -44,33 +42,96 @@ Returns a NamedTuple with fields:
 - `active_flag`:    flag for the active domain
 - `inactive_flag`:  flag for the inactive domain
 - `ghost_flag`:     flag for the ghost skeleton
-- `sbm_inner`:      flag for the SBM inner domain
-- `sbm_cut`:        flag for the SBM cut domain
+- `sbm_inner`:      flag for inner SBM domain
 - `flip_normal`:    whether to flip the embedded boundary normal
 """
-function _get_flags(config::DomainConfig)
+function _get_flags(config::DomainConfig, ::AGFEM)
     if config.side == OUTSIDE
         return (
-            physical_flag  = PHYSICAL_OUT,
-            active_flag    = ACTIVE_OUT,
-            inactive_flag  = config.intersected ? ACTIVE_IN : IN,
-            ghost_flag     = ACTIVE_OUT,
-            sbm_inner      = OUT,
-            sbm_cut        = CUT,
-            flip_normal    = true
+            physical_flag = PHYSICAL_OUT,
+            active_flag   = ACTIVE_OUT,
+            inactive_flag = IN,
+            ghost_flag    = nothing,
+            sbm_inner     = OUT,        # used for aggregates in FESpace
+            flip_normal   = true,
         )
-    else  # INSIDE
+    else
         return (
-            physical_flag  = PHYSICAL_IN,
-            active_flag    = ACTIVE_IN,
-            inactive_flag  = config.intersected ? ACTIVE_OUT : OUT,
-            ghost_flag     = ACTIVE_IN,
-            sbm_inner      = IN,
-            sbm_cut        = CUT,
-            flip_normal    = false
+            physical_flag = PHYSICAL_IN,
+            active_flag   = ACTIVE_IN,
+            inactive_flag = OUT,
+            ghost_flag    = nothing,
+            sbm_inner     = IN,         # used for aggregates in FESpace
+            flip_normal   = false
         )
     end
-end # function
+end
+
+function _get_flags(config::DomainConfig, ::CUTFEM)
+    if config.side == OUTSIDE
+        return (
+            physical_flag = PHYSICAL_OUT,
+            active_flag   = ACTIVE_OUT,
+            inactive_flag = IN,
+            ghost_flag    = ACTIVE_OUT,
+            sbm_inner     = nothing,
+            flip_normal   = true
+        )
+    else
+        return (
+            physical_flag = PHYSICAL_IN,
+            active_flag   = ACTIVE_IN,
+            inactive_flag = OUT,
+            ghost_flag    = ACTIVE_IN,
+            sbm_inner     = nothing,
+            flip_normal   = false
+        )
+    end
+end
+
+function _get_flags(config::DomainConfig, ::SBM)
+    if config.side == OUTSIDE
+        return (
+            physical_flag = OUT,
+            active_flag   = OUT,
+            inactive_flag = ACTIVE_IN,
+            ghost_flag    = nothing,
+            sbm_inner     = OUT,
+            flip_normal   = false
+        )
+    else
+        return (
+            physical_flag = IN,
+            active_flag   = IN,
+            inactive_flag = ACTIVE_OUT,
+            ghost_flag    = nothing,
+            sbm_inner     = IN,
+            flip_normal   = false
+        )
+    end
+end
+
+function _get_flags(config::DomainConfig, ::WSBM)
+    if config.side == OUTSIDE
+        return (
+            physical_flag = ACTIVE_OUT,
+            active_flag   = ACTIVE_OUT,
+            inactive_flag = IN,
+            ghost_flag    = ACTIVE_OUT,
+            sbm_inner     = OUT,
+            flip_normal   = false
+        )
+    else
+        return (
+            physical_flag = ACTIVE_IN,
+            active_flag   = ACTIVE_IN,
+            inactive_flag = OUT,
+            ghost_flag    = ACTIVE_IN,
+            sbm_inner     = IN,
+            flip_normal   = false
+        )
+    end
+end
 
 # ===================================================
 # Domain Struct
@@ -107,7 +168,7 @@ end # struct
 # Base Builders (private)
 # ===================================================
 function _build_agfem_base(cutgeo, cutgeo_facets, config::DomainConfig)
-    f     = _get_flags(config)
+    f     = _get_flags(config, AGFEM())
     Ω⁻    = Interior(cutgeo, f.physical_flag)
     Ω⁻act = Interior(cutgeo, f.active_flag)
     Γ₁    = EmbeddedBoundary(cutgeo)
@@ -117,8 +178,8 @@ function _build_agfem_base(cutgeo, cutgeo_facets, config::DomainConfig)
     return Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂
 end # function
 
-function _build_sbm_base(cutgeo, config::DomainConfig)
-    f     = _get_flags(config)
+function _build_sbm_base(cutgeo, config::DomainConfig, method::EmbeddingMethod)
+    f     = _get_flags(config, method)
     Ω⁻act = Interior(cutgeo, f.active_flag)
     Ω⁻pas = Interior(cutgeo, f.inactive_flag)
     Γ₁    = Interface(Ω⁻pas, Ω⁻act).⁻                   # TO DO: verify that we do not need to flip to .⁺ if we flip from OUTSIDE to INSIDE
@@ -137,7 +198,7 @@ function build_domain(method::AGFEM, cutgeo, cutgeo_facets, config::DomainConfig
 end # function
 
 function build_domain(method::CUTFEM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
-    f     = _get_flags(config)
+    f     = _get_flags(config, method)
     Ω⁻, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_agfem_base(cutgeo, cutgeo_facets, config)
     E⁰    = GhostSkeleton(cutgeo, f.ghost_flag)
     nE⁰   = get_normal_vector(E⁰)
@@ -145,16 +206,16 @@ function build_domain(method::CUTFEM, cutgeo, cutgeo_facets, config::DomainConfi
 end # function
 
 function build_domain(method::SBM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
-    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_sbm_base(cutgeo, config)
+    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_sbm_base(cutgeo, config, method)
     Domain(Ω⁻act, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, nothing, nothing, nothing)
 end # function
 
 function build_domain(method::WSBM, cutgeo, cutgeo_facets, config::DomainConfig=DomainConfig())
-    f     = _get_flags(config)
-    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_sbm_base(cutgeo, config)
+    f     = _get_flags(config, method)
+    Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂ = _build_sbm_base(cutgeo, config, method)
     E⁰    = GhostSkeleton(cutgeo, f.ghost_flag)
     nE⁰   = get_normal_vector(E⁰)
-    Ωwsbm  = (Interior(cutgeo, f.sbm_inner), Interior(cutgeo, f.sbm_cut))
+    Ωwsbm  = (Interior(cutgeo, f.sbm_inner), Interior(cutgeo, CUT))
     Domain(Ω⁻act, Ω⁻act, Γ₁, nΓ₁, Γ₂, nΓ₂, E⁰, nE⁰, Ωwsbm)
 end # function
 
@@ -217,21 +278,26 @@ end # function
 # Volume fraction for WSBM
 # ===================================================
 function volume_fraction(cutgeo::EmbeddedDiscretization, Ω⁻act::Triangulation)
-    Ω⁻    = Interior(cutgeo, CUT_OUT)
-    Ω⁻cut = Interior(cutgeo, CUT)
+    # Ω⁻    = Interior(cutgeo, CUT_OUT)
+    # Ω⁻cut = Interior(cutgeo, CUT)
+    Ω⁻    = Interior(cutgeo, PHYSICAL_OUT)
+    Ω⁻cut = Interior(cutgeo, ACTIVE_OUT)
 
     vol⁻    = get_cell_measure(Ω⁻, Ω⁻cut)
     vol⁻act = get_cell_measure(Ω⁻cut)
-    γvol    = vol⁻ ./ vol⁻act
+    vol⁻ ./ vol⁻act
+    # γvol    = vol⁻ ./ vol⁻act
 
-    bg_to_ioc    = compute_bgcell_to_inoutcut(cutgeo, cutgeo.geo)
-    cell_to_mask = collect(Bool, bg_to_ioc .!= -1)
-    bg_to_ioc2   = bg_to_ioc[cell_to_mask]
-    inds         = findall(x -> x == 0, bg_to_ioc2)
-    A            = float(bg_to_ioc2)
-    A[inds]      = γvol
 
-    CellField(A, Ω⁻act)
+
+    # bg_to_ioc    = compute_bgcell_to_inoutcut(cutgeo, cutgeo.geo)
+    # cell_to_mask = collect(Bool, bg_to_ioc .!= -1)
+    # bg_to_ioc2   = bg_to_ioc[cell_to_mask]
+    # inds         = findall(x -> x == 0, bg_to_ioc2)
+    # A            = float(bg_to_ioc2)
+    # A[inds]      = γvol
+
+    # CellField(A, Ω⁻act)
 end # function
 
 function volume_fraction(cutgeo::STLEmbeddedDiscretization, Ω⁻act::Triangulation)

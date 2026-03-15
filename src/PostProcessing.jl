@@ -296,39 +296,103 @@ function _plot_wsbm(order::Int, nₓ::Int, min_times::Dict)
     return _helper_plot(WSBM(), order, nₓ, min_times)
 end # function
 
+function save_convergence(path::String, method::EmbeddingMethod,
+                            l2s, cns, nₓ_vec, orders)
+    data = Dict(
+        "method" => string(typeof(method)),
+        "nₓ_vec" => nₓ_vec,
+        "orders" => orders,
+        "l2s"    => Dict(
+            string(order) => Dict(string(nₓ) => l2s[order][nₓ] for nₓ in nₓ_vec)
+            for order in orders),
+        "cns"    => Dict(
+            string(order) => Dict(string(nₓ) => cns[order][nₓ] for nₓ in nₓ_vec)
+            for order in orders)
+    )
+    open(path, "w") do io
+        JSON3.write(io, data)
+    end
+    println("Saved convergence results to $path")
+end
+
+function load_convergence(path::String)
+    data   = JSON3.read(read(path, String))
+    orders = Int.(collect(data["orders"]))
+    nₓ_vec = Int.(collect(data["nₓ_vec"]))
+    method = data["method"]
+
+    l2s = Dict(
+        order => Dict(
+            nₓ => Float64(data["l2s"][string(order)][string(nₓ)])
+            for nₓ in nₓ_vec)
+        for order in orders)
+
+    cns = Dict(
+        order => Dict(
+            nₓ => Float64(data["cns"][string(order)][string(nₓ)])
+            for nₓ in nₓ_vec)
+        for order in orders)
+
+    return method, l2s, cns, nₓ_vec, orders
+end
+
+const METHOD_COLORS = Dict{String, RGB{Float64}}(
+    "AGFEM"  => RGB(204/255, 102/255, 119/255),  # pink
+    "CUTFEM" => RGB( 51/255,  34/255, 136/255),  # dark blue
+    "SBM"    => RGB( 17/255, 119/255,  51/255),  # green
+    "WSBM"   => RGB(170/255,  68/255, 153/255),  # purple
+)
+
+function _load_l2_cns(path::String)
+    # Try convergence file first, fall back to benchmark file
+    data = JSON3.read(read(path, String))
+    if haskey(data, "min_times")
+        # benchmark file
+        method, _, _, l2s, cns, nₓ_vec, orders, _ = load_benchmark(path)
+    else
+        # convergence file
+        method, l2s, cns, nₓ_vec, orders = load_convergence(path)
+    end
+    return string(method), l2s, cns, nₓ_vec, orders
+end
+
 function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothing, kwargs...)
 
-    # Load all data first
-    datasets = [load_benchmark(path) for path in paths]
-
-    # Determine orders to plot — union of all orders across files, or user-specified
+    datasets   = [_load_l2_cns(path) for path in paths]
     all_orders = orders !== nothing ? orders :
-                    sort(unique(vcat([d[7] for d in datasets]...)))
+                    sort(unique(vcat([d[5] for d in datasets]...)))
 
     # Reference slopes scaled to first dataset first order
-    _, _, _, l2s_ref, _, nₓ_ref, ord_ref, _ = datasets[1]
+    _, l2s_ref, _, nₓ_ref, ord_ref = datasets[1]
     nₓ_f = Float64.(sort(nₓ_ref))
     c    = l2s_ref[ord_ref[1]][sort(nₓ_ref)[end]]
 
     plots = []
     for order in all_orders
         p = plot(; xlabel="nₓ", ylabel="L2 norm", xaxis=:log, yaxis=:log,
-                    title="L2 convergence: order=$order",
+                    title="L2 convergence — order=$order",
                     legend=:outertopright, kwargs...)
 
-        for (i, (path, dataset)) in enumerate(zip(paths, datasets))
-            method_str, _, _, l2s, _, nₓ_vec, file_orders, _ = dataset
+        # Collect all l2 values for this order to scale reference lines
+        all_l2_vals = Float64[]
+        for (_, l2s, _, nₓ_vec, file_orders) in datasets
             order ∉ file_orders && continue
+            append!(all_l2_vals, [l2s[order][nₓ] for nₓ in sort(nₓ_vec)])
+        end
 
+        # Scale reference lines to the maximum l2 value at the coarsest mesh
+        c = maximum(all_l2_vals)
+
+        for (i, (method_str, l2s, _, nₓ_vec, file_orders)) in enumerate(datasets)
+            order ∉ file_orders && continue
             sort!(nₓ_vec)
             l2_vals = [l2s[order][nₓ] for nₓ in nₓ_vec]
             plot!(p, nₓ_vec, l2_vals;
-                    marker = marker,
-                    label  = method_str,
-                    color  = TOL_COLORS[mod1(i, length(TOL_COLORS))])
+                marker = marker,
+                label  = method_str,
+                color  = get(METHOD_COLORS, method_str, FALLBACK_COLOR))
         end
 
-        # Reference slopes
         plot!(p, nₓ_f, c .* nₓ_f.^(-1); linestyle=:solid, color=:black, label="O(h¹)")
         plot!(p, nₓ_f, c .* nₓ_f.^(-2); linestyle=:dash,  color=:black, label="O(h²)")
         plot!(p, nₓ_f, c .* nₓ_f.^(-3); linestyle=:dot,   color=:black, label="O(h³)")
@@ -337,38 +401,44 @@ function plot_L2_from_files(paths::Vector{String}; marker=:circle, orders=nothin
     end
 
     return plots
-end # function
+end
 
 function plot_cond_from_files(paths::Vector{String}; marker=:circle, orders=nothing, kwargs...)
 
-    datasets   = [load_benchmark(path) for path in paths]
+    datasets   = [_load_l2_cns(path) for path in paths]
     all_orders = orders !== nothing ? orders :
-                    sort(unique(vcat([d[7] for d in datasets]...)))
+                    sort(unique(vcat([d[5] for d in datasets]...)))
 
-    # Reference slopes
-    _, _, _, _, cns_ref, nₓ_ref, ord_ref, _ = datasets[1]
+    _, _, cns_ref, nₓ_ref, ord_ref = datasets[1]
     nₓ_f = Float64.(sort(nₓ_ref))
     c    = cns_ref[ord_ref[1]][sort(nₓ_ref)[1]]
 
     plots = []
     for order in all_orders
         p = plot(; xlabel="nₓ", ylabel="Condition number (L1)", xaxis=:log, yaxis=:log,
-                    title="Condition number: order=$order",
+                    title="Condition number — order=$order",
                     legend=:outertopright, kwargs...)
 
-        for (i, (path, dataset)) in enumerate(zip(paths, datasets))
-            method_str, _, _, _, cns, nₓ_vec, file_orders, _ = dataset
+        # Collect all l2 values for this order to scale reference lines
+        all_cn_vals = Float64[]
+        for (_, _, cns, nₓ_vec, file_orders) in datasets
             order ∉ file_orders && continue
+            append!(all_cn_vals, [cns[order][nₓ] for nₓ in sort(nₓ_vec)])
+        end
 
+        # Scale reference lines to the maximum l2 value at the coarsest mesh
+        c = maximum(all_cn_vals)
+
+        for (i, (method_str, _, cns, nₓ_vec, file_orders)) in enumerate(datasets)
+            order ∉ file_orders && continue
             sort!(nₓ_vec)
             cn_vals = [cns[order][nₓ] for nₓ in nₓ_vec]
             plot!(p, nₓ_vec, cn_vals;
-                    marker = marker,
-                    label  = method_str,
-                    color  = TOL_COLORS[mod1(i, length(TOL_COLORS))])
+                marker = marker,
+                label  = method_str,
+                color  = get(METHOD_COLORS, method_str, FALLBACK_COLOR))
         end
 
-        # Reference slopes for condition number growth
         plot!(p, nₓ_f, c .* nₓ_f.^(2); linestyle=:solid, color=:black, label="O(h⁻²)")
         plot!(p, nₓ_f, c .* nₓ_f.^(4); linestyle=:dash,  color=:black, label="O(h⁻⁴)")
 
@@ -376,4 +446,4 @@ function plot_cond_from_files(paths::Vector{String}; marker=:circle, orders=noth
     end
 
     return plots
-end # function
+end
