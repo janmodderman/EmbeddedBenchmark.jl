@@ -98,12 +98,14 @@ The pipeline stages are:
 
 | Category | Description |
 |----------|-------------|
-| `:setup` | Model construction, cutting, quadratures, weak form, RHS |
+| `:setup` | Model construction, domain cutting, quadrature constuction, weak form, RHS |
 | `:domain` | Domain and triangulation construction |
 | `:spaces` | FE space construction |
 | `:interior_matrix` | Assembly of interior bilinear form |
-| `:ghost_matrix` | Assembly of ghost penalty matrix (CutFEM, WSBM) |
-| `:boundary_matrix` | Assembly of shifted boundary matrix (SBM, WSBM) |
+| `:ghost_matrix` | Assembly of ghost penalty on edges (CutFEM, WSBM) |
+| `:boundary_matrix` | Assembly of shifted boundary conditions on boundary (SBM, WSBM) |
+| `:shifted_edges` | Assembly of shifted boundary conditions on edges (WSBM) |
+| `:volume_fraction` | Calculation of the volume fraction (WSBM) |
 | `:solving` | Linear solve |
 
 **Time breakdown — order 1:**
