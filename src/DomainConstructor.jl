@@ -277,6 +277,7 @@ end # function
 # ===================================================
 # Volume fraction for WSBM
 # ===================================================
+# TO DO: remove hardcoded dependency and call to Ω⁻act, assign flag via config?
 function volume_fraction(cutgeo::EmbeddedDiscretization, Ω⁻act::Triangulation)
     # Ω⁻    = Interior(cutgeo, CUT_OUT)
     # Ω⁻cut = Interior(cutgeo, CUT)

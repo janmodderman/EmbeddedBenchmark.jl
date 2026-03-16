@@ -76,17 +76,8 @@ function _a_shift_edge(dE⁰::Measure, nE⁰::SkeletonPair,
                         dist_edg::DistanceData, α::Vector{<:Float64})
     d = dist_edg.d
     n = dist_edg.n
-    # (ϕ, v) -> ∫((jump_n((_w_α ∘ (α, v)),nE⁰,n) ⋅ ( mean(∇(ϕ)))) - (jump((_w_α ∘ (α, v)) * nE⁰) ⋅ mean(∇(ϕ))))dE⁰ +
-    #             ∫(mean((_w_α ∘ (α, v))) ⋅ ( jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
-
     (ϕ, v) -> ∫((jump_n((_w_α ∘ (α, v)),nE⁰,n) ⋅ ((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ)))) - (jump((_w_α ∘ (α, v)) * nE⁰) ⋅ mean(∇(ϕ))))dE⁰ +
                 ∫(mean((_w_α ∘ (α, v))) ⋅ (jump_d(∇∇(ϕ),d,nE⁰,n) + jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
-
-
-    # (ϕ, v) -> ∫(jump(nE⁰ * (_w_α ∘ (α, v))) ⋅ 
-    #                 ((((mean(∇∇(ϕ)) ⋅ d) + mean(∇(ϕ))) ⋅ n) * n - mean(∇(ϕ))))dE⁰ +
-    #             ∫(mean((_w_α ∘ (α, v))) ⋅ 
-    #                 (jump_d(∇∇(ϕ),d,nE⁰,n) + jump_n(∇(ϕ),nE⁰,n)))dE⁰ 
 end # function
 
 # --- Shift on boundary ---
@@ -99,7 +90,6 @@ end # function
 function _a_shift_boundary(dΓ₁::Measure, nΓ₁::CellField, dist::DistanceData, α::Vector{<:Float64})
     d = dist.d
     n = dist.n
-    # (ϕ, v) -> ∫((nΓ₁ ⋅ ((( ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * (_w_α ∘ (α, v)))dΓ₁
     (ϕ, v) -> ∫((nΓ₁ ⋅ ((((∇∇(ϕ) ⋅ d) + ∇(ϕ)) ⋅ n) * n - ∇(ϕ))) * (_w_α ∘ (α, v)))dΓ₁
 end # function
 

@@ -473,7 +473,7 @@ function convergence_run(method::EmbeddingMethod, nₓ_vec::Vector{Int},
     embedded_geo  = N == 2 ? CylinderGeometry(R, params.geometry.x₀) :
                                 SphereGeometry(R,  params.geometry.x₀)
 
-    domain_config = DomainConfig(OUTSIDE)
+    domain_config = DomainConfig(OUTSIDE, ["top"])
 
     l2s = Dict(order => Dict(nₓ => 0.0 for nₓ in nₓ_vec) for order in orders)
     cns = Dict(order => Dict(nₓ => 0.0 for nₓ in nₓ_vec) for order in orders)
@@ -481,7 +481,7 @@ function convergence_run(method::EmbeddingMethod, nₓ_vec::Vector{Int},
     for order in orders
         fe_config  = FESpaceConfig(order, ["DT"], 0.0)
         u, ∇u, Δu = manufactured_functions(sol)
-        f₁         = x -> Δu(x, fe_config.t)
+        f₁         = x -> -Δu(x, fe_config.t)
         f₂         = x -> ∇u(x, fe_config.t)
 
         for nₓ in nₓ_vec
