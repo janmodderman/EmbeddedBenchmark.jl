@@ -40,12 +40,12 @@ where the dispersion relation $\omega = \sqrt{gk\tanh(kd)}$ is enforced. The sou
 
 **2D — Cylinder (circle cross-section):**
 
-<img src="figures/domain_2d_cylinder.png" width="600"/>
+<img src="figures/domain_2d_cylinder.png" width="300"/>
 *Figure 1: 2D computational domain with embedded cylinder. The fluid domain Ω⁻ is the region outside the cylinder. The surrogate boundary Γ₁ consists of cut cell faces. The free surface Γ₂ is the top boundary.*
 
 **3D — Sphere:**
 
-<img src="figures/domain_3d_sphere.png" width="600"/>
+<img src="figures/domain_3d_sphere.png" width="300"/>
 *Figure 2: 3D computational domain with embedded sphere.*
 
 ---
@@ -56,36 +56,36 @@ where the dispersion relation $\omega = \sqrt{gk\tanh(kd)}$ is enforced. The sou
 
 **L2 convergence:**
 
-<img src="figures/l2_2d_cylinder_order1.png" width="700"/>
+<img src="figures/l2_2d_cylinder_order1.png" width="350"/>
 *Figure 3: L2 convergence for all four methods, polynomial order 1, 2D cylinder.*
 
-<img src="figures/l2_2d_cylinder_order2.png" width="700"/>
+<img src="figures/l2_2d_cylinder_order2.png" width="350"/>
 *Figure 4: L2 convergence for all four methods, polynomial order 2, 2D cylinder.*
 
 **Condition numbers:**
 
-<img src="figures/cond_2d_cylinder_order1.png" width="700"/>
+<img src="figures/cond_2d_cylinder_order1.png" width="350"/>
 *Figure 5: Condition number (L1 norm) for all four methods, polynomial order 1, 2D cylinder.*
 
-<img src="figures/cond_2d_cylinder_order2.png" width="700"/>
+<img src="figures/cond_2d_cylinder_order2.png" width="350"/>
 *Figure 6: Condition number (L1 norm) for all four methods, polynomial order 2, 2D cylinder.*
 
 ### 3D — Sphere
 
 **L2 convergence:**
 
-<img src="figures/l2_3d_sphere_order1.png" width="700"/>
+<img src="figures/l2_3d_sphere_order1.png" width="350"/>
 *Figure 7: L2 convergence for all four methods, polynomial order 1, 3D sphere.*
 
-<img src="figures/l2_3d_sphere_order2.png" width="700"/>
+<img src="figures/l2_3d_sphere_order2.png" width="350"/>
 *Figure 8: L2 convergence for all four methods, polynomial order 2, 3D sphere.*
 
 **Condition numbers:**
 
-<img src="figures/cond_3d_sphere_order1.png" width="700"/>
+<img src="figures/cond_3d_sphere_order1.png" width="350"/>
 *Figure 9: Condition number (L1 norm) for all four methods, polynomial order 1, 3D sphere.*
 
-<img src="figures/cond_3d_sphere_order2.png" width="700"/>
+<img src="figures/cond_3d_sphere_order2.png" width="350"/>
 *Figure 10: Condition number (L1 norm) for all four methods, polynomial order 2, 3D sphere.*
 
 ---
@@ -108,12 +108,12 @@ The pipeline stages are:
 
 **Time breakdown — order 1:**
 
-<img src="figures/bar_2d_cylinder_order1_cutfem.png" width="800"/>
+<img src="figures/bar_2d_cylinder_order1_cutfem.png" width="400"/>
 *Figure 11: Time breakdown per pipeline stage, polynomial order 1, 2D cylinder, CutFEM. Each bar corresponds to one mesh size nₓ.*
 
 **Time breakdown — order 2:**
 
-<img src="figures/bar_2d_cylinder_order2_cutfem.png" width="800"/>
+<img src="figures/bar_2d_cylinder_order2_cutfem.png" width="400"/>
 *Figure 12: Time breakdown per pipeline stage, polynomial order 2, 2D cylinder, CutFEM.*
 
 ---
